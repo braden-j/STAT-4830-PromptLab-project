@@ -4,3 +4,21 @@ docs/figures/*
 !docs/figures/*.tex
 
 local/
+
+# System
+.DS_Store
+
+# Python
+__pycache__/
+
+# Secrets
+.env
+
+# Model checkpoints
+*.pt
+*.ckpt
+checkpoints/
+
+# Logs & data
+wandb/
+data/
