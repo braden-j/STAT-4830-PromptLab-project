@@ -19,6 +19,7 @@ dependencies = [
     "tqdm>=4.65.0",
     "pyyaml>=6.0",
     "einops>=0.7.0",
+    "scikit-learn>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -29,6 +30,9 @@ dev = [
     "pytest-cov>=4.0.0",
     "ruff>=0.1.0",
 ]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.uv]
 dev-dependencies = [

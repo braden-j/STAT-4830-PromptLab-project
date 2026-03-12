@@ -13,11 +13,14 @@ import yaml
 class ModelConfig:
     """Model backbone and head configuration."""
 
-    backbone_name: str = "meta-llama/Llama-2-7b-hf"
+    backbone_name: str = "distilbert-base-uncased"
+    backbone_type: str = "encoder"  # "encoder" | "causal"
     max_length: int = 512
     num_labels: int = 2  # slop vs not-slop
     dropout: float = 0.1
     use_unsloth: bool = False
+    use_lora: bool = True
+    freeze_base: bool = True  # freeze all base weights except LoRA + classifier head
     lora_r: int = 16
     lora_alpha: int = 32
     lora_dropout: float = 0.05
@@ -34,6 +37,8 @@ class TrainingConfig:
     num_epochs: int = 3
     warmup_ratio: float = 0.1
     weight_decay: float = 0.01
+    max_grad_norm: float = 1.0
+    early_stopping_patience: int = 3
     fp16: bool = True
     use_wandb: bool = False
     run_name: str | None = None

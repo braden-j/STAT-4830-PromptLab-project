@@ -1,18 +1,17 @@
 """Unit tests for tokenization and label alignment."""
 
 import pytest
-from transformers import AutoTokenizer
-
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from slop_minimization.data.tokenizer import tokenize_and_align_labels, SlopTokenizer
+from conftest import get_tokenizer
 
 
 @pytest.fixture
 def tokenizer():
-    return AutoTokenizer.from_pretrained("gpt2")
+    return get_tokenizer()
 
 
 def test_tokenize_and_align_labels_same_length(tokenizer):

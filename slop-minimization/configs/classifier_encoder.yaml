@@ -1,22 +1,25 @@
-# Default config for slop minimization
+# Token classifier (encoder backbone) config
 
 model:
   backbone_name: "distilbert-base-uncased"
   backbone_type: encoder
-  max_length: 512
+  max_length: 256
   num_labels: 2
   dropout: 0.1
   use_unsloth: false
+  use_lora: true
+  freeze_base: true
   lora_r: 16
   lora_alpha: 32
   lora_dropout: 0.05
-  lora_target_modules: ["q_proj", "v_proj"]
+  # Encoder (DistilBERT): q_lin, k_lin, v_lin. Causal (Llama/Mistral): q_proj, v_proj, k_proj, o_proj
+  lora_target_modules: ["q_lin", "k_lin", "v_lin"]
 
 training:
-  batch_size: 8
-  gradient_accumulation_steps: 4
+  batch_size: 16
+  gradient_accumulation_steps: 2
   learning_rate: 2e-5
-  num_epochs: 3
+  num_epochs: 5
   warmup_ratio: 0.1
   weight_decay: 0.01
   max_grad_norm: 1.0
@@ -24,7 +27,7 @@ training:
   fp16: true
   use_wandb: false
   run_name: null
-  output_dir: outputs
+  output_dir: outputs/classifier
   seed: 42
   eval_steps: 100
   save_steps: 500
@@ -33,15 +36,6 @@ training:
 data:
   train_path: data/train.jsonl
   val_path: data/val.jsonl
-  test_path: data/test.jsonl
   text_column: text
   label_column: labels
   max_samples: null
-
-prompt_search:
-  num_iterations: 100
-  population_size: 20
-  mutation_rate: 0.1
-  top_k: 5
-  prompt_length: 32
-  seed_prompts: []
