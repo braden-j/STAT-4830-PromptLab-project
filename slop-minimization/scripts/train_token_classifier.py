@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import random
+from collections import Counter
 from pathlib import Path
 
 import torch
@@ -39,6 +41,54 @@ def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+
+def count_trainable_parameters(model: torch.nn.Module) -> int:
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+
+def first_batch_difficulty_counts(
+    train_difficulties: list[str],
+    weights: list[float],
+    batch_size: int,
+    seed_offset: int = 0,
+) -> dict[str, int]:
+    """Sample first batch indices using same distribution as WeightedRandomSampler; return difficulty counts."""
+    probs = torch.tensor(weights, dtype=torch.float64)
+    probs = probs / probs.sum()
+    gen = torch.Generator()
+    gen.manual_seed(42 + seed_offset)
+    n_sample = min(batch_size, len(weights))
+    idx = torch.multinomial(probs, num_samples=n_sample, replacement=True, generator=gen)
+    first_indices = idx.tolist()
+    diff_collection = [train_difficulties[i] for i in first_indices]
+    return dict(Counter(diff_collection))
+
+
+def checksum_state_dict(state_dict: dict) -> str:
+    """Return a short SHA-256 checksum of the saved state (param names + shapes + first bytes of data)."""
+    h = hashlib.sha256()
+    for k in sorted(state_dict.keys()):
+        t = state_dict[k]
+        h.update(k.encode())
+        h.update(str(tuple(t.shape)).encode())
+        # Include a small amount of data so different weights produce different hashes
+        if t.numel() > 0:
+            flat = t.flatten()
+            h.update(flat[: min(32, flat.numel())].cpu().numpy().tobytes())
+    return h.hexdigest()[:16]
+
+
+def checksum_saved_file(path: Path) -> str:
+    """Return SHA-256 hex digest of file (first 16 chars)."""
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        while True:
+            blk = f.read(65536)
+            if not blk:
+                break
+            h.update(blk)
+    return h.hexdigest()[:16]
 
 
 def collate_fn(batch):
@@ -136,9 +186,24 @@ def main() -> None:
     out_dir = Path(cfg_train.output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # [DEBUG] output_dir and overwrite risk
+    print(f"[DEBUG] output_dir = {out_dir.resolve()}")
+    existing_ckpt = out_dir / "pytorch_model.bin"
+    if existing_ckpt.exists():
+        print(f"[DEBUG] WARNING: {existing_ckpt} already exists; training will overwrite it. Use a different --output-dir for curriculum vs baseline.")
+
     model, tokenizer = create_classifier_and_tokenizer(cfg_model)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
+
+    # [DEBUG] trainable parameter count
+    n_trainable = count_trainable_parameters(model)
+    n_total = sum(p.numel() for p in model.parameters())
+    print(f"[DEBUG] trainable_parameters = {n_trainable} / {n_total} (total)")
+
+    # [DEBUG] initial weights checksum (should differ from checksum after training if params update)
+    initial_checksum = checksum_state_dict(model.state_dict())
+    print(f"[DEBUG] initial state_dict_checksum = {initial_checksum}")
 
     train_data = load_jsonl(cfg_data.train_path)
     val_data = load_jsonl(cfg_data.val_path)
@@ -203,12 +268,15 @@ def main() -> None:
     best_epoch = -1
     patience_counter = 0
 
-    for epoch in range(int(cfg_train.num_epochs)):
+    n_epochs = int(cfg_train.num_epochs)
+    early_ratio = getattr(cfg_data, "curriculum_early_epoch_ratio", 0.5)
+    n_early = max(1, int(n_epochs * early_ratio)) if train_difficulties else 0
+
+    for epoch in range(n_epochs):
         epoch_loader = train_loader
+        curriculum_sampler_enabled = False
         if train_difficulties is not None:
-            n_epochs = int(cfg_train.num_epochs)
-            early_ratio = getattr(cfg_data, "curriculum_early_epoch_ratio", 0.5)
-            n_early = max(1, int(n_epochs * early_ratio))
+            curriculum_sampler_enabled = True
             if epoch < n_early:
                 w_e, w_m, w_h = getattr(cfg_data, "curriculum_early_easy", 0.8), getattr(cfg_data, "curriculum_early_medium", 0.2), getattr(cfg_data, "curriculum_early_hard", 0.0)
             else:
@@ -216,6 +284,15 @@ def main() -> None:
             wmap = {"easy": w_e, "medium": w_m, "hard": w_h}
             weights = [wmap.get(d, 1.0) for d in train_difficulties]
             epoch_loader = DataLoader(tokenized_train, batch_size=int(cfg_train.batch_size), shuffle=False, sampler=WeightedRandomSampler(weights, num_samples=len(weights)), collate_fn=collate_fn, num_workers=0)
+
+        # [DEBUG] curriculum sampler enabled this epoch
+        print(f"[DEBUG] epoch {epoch + 1}/{n_epochs} curriculum_sampler_enabled = {curriculum_sampler_enabled}")
+
+        # [DEBUG] first-batch difficulty distribution for epoch 1 and a later epoch
+        if train_difficulties is not None and (epoch == 0 or epoch == n_early):
+            first_batch_diff = first_batch_difficulty_counts(train_difficulties, weights, int(cfg_train.batch_size), seed_offset=epoch * 999)
+            print(f"[DEBUG] epoch {epoch + 1} first_batch_difficulty_distribution = {first_batch_diff}")
+
         train_loss = train_one_epoch(
             model,
             epoch_loader,
@@ -243,8 +320,12 @@ def main() -> None:
                 best_metric = metric_for_best
                 best_epoch = epoch + 1
                 patience_counter = 0
-                torch.save(model.state_dict(), out_dir / "pytorch_model.bin")
+                save_path = out_dir / "pytorch_model.bin"
+                torch.save(model.state_dict(), save_path)
                 tokenizer.save_pretrained(out_dir)
+                ckpt_checksum = checksum_saved_file(save_path)
+                state_checksum = checksum_state_dict(model.state_dict())
+                print(f"[DEBUG] saved checkpoint: file_checksum = {ckpt_checksum} state_dict_checksum = {state_checksum}")
             else:
                 patience_counter += 1
                 if patience_counter >= patience:
@@ -252,12 +333,21 @@ def main() -> None:
                     break
         else:
             print(log_msg)
-            torch.save(model.state_dict(), out_dir / "pytorch_model.bin")
+            save_path = out_dir / "pytorch_model.bin"
+            torch.save(model.state_dict(), save_path)
             tokenizer.save_pretrained(out_dir)
+            ckpt_checksum = checksum_saved_file(save_path)
+            state_checksum = checksum_state_dict(model.state_dict())
+            print(f"[DEBUG] saved checkpoint (no val): file_checksum = {ckpt_checksum} state_dict_checksum = {state_checksum}")
 
     if val_loader and patience_counter < patience:
         print(f"Best epoch {best_epoch} doc_auroc={best_metric:.4f}")
     print(f"Model and tokenizer saved to {out_dir}")
+    final_ckpt = out_dir / "pytorch_model.bin"
+    if final_ckpt.exists():
+        print(f"[DEBUG] final saved checkpoint file_checksum = {checksum_saved_file(final_ckpt)}")
+    if train_difficulties is not None:
+        print("[DEBUG] Curriculum was enabled. To compare baseline vs curriculum, run baseline with --output-dir outputs/classifier and curriculum with --output-dir outputs/classifier_curriculum (different dirs).")
 
 
 if __name__ == "__main__":
