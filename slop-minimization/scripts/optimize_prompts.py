@@ -1,118 +1,105 @@
 #!/usr/bin/env python3
-"""Black-box prompt search: use classifier as reward model to optimize prompts."""
+"""Run prompt optimization: hill climbing to minimize slop using the reward model."""
+
+from __future__ import annotations
 
 import argparse
-import random
-import string
+import sys
+from datetime import datetime
 from pathlib import Path
 
-import torch
-
-import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from transformers import AutoTokenizer
+import yaml
+from slop_minimization.scoring import SlopRewardModel, RewardConfig
+from slop_minimization.prompt_opt import (
+    FrozenGenerator,
+    GeneratorConfig,
+    run_hill_climbing,
+    HillClimbConfig,
+    get_seeds_for_task,
+)
+from slop_minimization.prompt_opt.templates import PromptSpec
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser()
-    p.add_argument("--config", type=str, default=None)
-    p.add_argument("--classifier-path", type=str, default="outputs/classifier")
-    p.add_argument("--output-path", type=str, default="outputs/prompts.txt")
-    p.add_argument("--num-iterations", type=int, default=100)
-    p.add_argument("--population-size", type=int, default=20)
-    p.add_argument("--mutation-rate", type=float, default=0.1)
-    p.add_argument("--top-k", type=int, default=5)
-    p.add_argument("--prompt-length", type=int, default=32)
-    p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--device", type=str, default=None)
+    p = argparse.ArgumentParser(description="Optimize prompts via hill climbing to minimize slop")
+    p.add_argument("--config", type=str, default="configs/prompt_opt.yaml", help="YAML config path")
+    p.add_argument("--task", type=str, default=None, help="Task/topic instruction (overrides config)")
+    p.add_argument("--reward-checkpoint", type=str, default=None, help="Reward model checkpoint (overrides config)")
+    p.add_argument("--reward-config", type=str, default=None, help="Reward model config YAML (overrides config)")
+    p.add_argument("--generator-model", type=str, default=None, help="Generator model name (overrides config)")
+    p.add_argument("--output-dir", type=str, default=None, help="Base output dir (default: outputs/prompt_opt)")
+    p.add_argument("--iterations", type=int, default=None)
+    p.add_argument("--population-size", type=int, default=None)
+    p.add_argument("--top-k", type=int, default=None)
+    p.add_argument("--samples-per-prompt", type=int, default=None)
+    p.add_argument("--seed", type=int, default=None)
     return p.parse_args()
-
-
-def random_prompt(length: int) -> str:
-    return "".join(random.choices(string.ascii_letters + " ", k=length))
-
-
-def mutate(prompt: str, rate: float) -> str:
-    chars = list(prompt)
-    for i in range(len(chars)):
-        if random.random() < rate:
-            chars[i] = random.choice(string.ascii_letters + " ")
-    return "".join(chars)
-
-
-def score_prompts(model, tokenizer, prompts: list[str], device: str) -> list[float]:
-    """Score prompts using classifier as reward (1 - mean slop prob)."""
-    if not hasattr(model, "score_tokens"):
-        # Fallback: random scores for skeleton
-        return [random.random() for _ in prompts]
-    inputs = tokenizer(
-        prompts,
-        padding=True,
-        truncation=True,
-        max_length=128,
-        return_tensors="pt",
-    ).to(device)
-    probs = model.score_tokens(inputs["input_ids"], inputs["attention_mask"])
-    rewards = 1.0 - probs.mean(dim=1).cpu().tolist()
-    return rewards
 
 
 def main() -> None:
     args = parse_args()
-    random.seed(args.seed)
-    device = args.device or ("cuda" if torch.cuda.is_available() else "cpu")
+    config_path = Path(args.config)
+    if not config_path.exists():
+        print(f"Config not found: {config_path}", file=sys.stderr)
+        sys.exit(1)
+    with open(config_path) as f:
+        cfg = yaml.safe_load(f) or {}
 
-    classifier_path = Path(args.classifier_path)
-    if not classifier_path.exists():
-        print(f"Classifier not found at {classifier_path}. Run train_token_classifier.py first.")
-        print("Running black-box search with random rewards (skeleton mode).")
+    reward_cfg = cfg.get("reward", {})
+    if args.reward_checkpoint:
+        reward_cfg["checkpoint_path"] = args.reward_checkpoint
+    if args.reward_config:
+        reward_cfg["config_path"] = args.reward_config
+    reward_config = RewardConfig(**{k: v for k, v in reward_cfg.items() if k in RewardConfig.__dataclass_fields__})
+    reward_model = SlopRewardModel(reward_config)
+    reward_model.load()
 
-    model = None
-    tokenizer = None
-    if classifier_path.exists():
-        try:
-            from slop_minimization.models.token_classifier import SlopTokenClassifier
-            tokenizer = AutoTokenizer.from_pretrained(classifier_path)
-            model = SlopTokenClassifier(
-                backbone_name=str(classifier_path),
-                num_labels=2,
-            ).to(device)
-            model.load_state_dict(torch.load(classifier_path / "pytorch_model.bin", map_location=device))
-        except Exception as e:
-            print(f"Could not load classifier: {e}. Using random rewards.")
+    gen_cfg = cfg.get("generator", {})
+    if args.generator_model:
+        gen_cfg["model_name"] = args.generator_model
+    generator_config = GeneratorConfig(**{k: v for k, v in gen_cfg.items() if k in GeneratorConfig.__dataclass_fields__})
+    generator = FrozenGenerator(generator_config)
+    generator.load()
 
-    if model is None:
-        tokenizer = AutoTokenizer.from_pretrained("gpt2")
+    task = args.task or cfg.get("default_task", "Explain the given topic in 2-3 short paragraphs.")
+    search_cfg = cfg.get("search", {})
+    if args.iterations is not None:
+        search_cfg["num_iterations"] = args.iterations
+    if args.population_size is not None:
+        search_cfg["population_size"] = args.population_size
+    if args.top_k is not None:
+        search_cfg["top_k"] = args.top_k
+    if args.samples_per_prompt is not None:
+        search_cfg["samples_per_prompt"] = args.samples_per_prompt
+    if args.seed is not None:
+        search_cfg["random_seed"] = args.seed
+    hill_config = HillClimbConfig(**{k: v for k, v in search_cfg.items() if k in HillClimbConfig.__dataclass_fields__})
 
-    population = [random_prompt(args.prompt_length) for _ in range(args.population_size)]
-    best_reward = -float("inf")
-    best_prompt = population[0]
+    base_out = args.output_dir or cfg.get("output_dir", "outputs/prompt_opt")
+    run_dir = Path(base_out) / f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-    for it in range(args.num_iterations):
-        scores = score_prompts(model, tokenizer, population, device) if model else [random.random() for _ in population]
-        indexed = list(zip(scores, population))
-        indexed.sort(key=lambda x: x[0], reverse=True)
-        top = [p for _, p in indexed[: args.top_k]]
-        best_reward = max(best_reward, indexed[0][0])
-        best_prompt = indexed[0][1]
-
-        # New population: top-k + mutations
-        new_pop = list(top)
-        while len(new_pop) < args.population_size:
-            parent = random.choice(top)
-            new_pop.append(mutate(parent, args.mutation_rate))
-        population = new_pop
-
-        if (it + 1) % 10 == 0:
-            print(f"Iter {it+1}/{args.num_iterations} best_reward={best_reward:.4f} best_prompt={best_prompt[:50]}...")
-
-    Path(args.output_path).parent.mkdir(parents=True, exist_ok=True)
-    with open(args.output_path, "w") as f:
-        f.write(best_prompt + "\n")
-        for p in population[: args.top_k]:
-            f.write(p + "\n")
-    print(f"Top prompts saved to {args.output_path}")
+    print("Task:", task)
+    print("Reward checkpoint:", reward_config.checkpoint_path)
+    print("Generator:", generator_config.model_name)
+    print("Output dir:", run_dir)
+    print("Running hill climbing...")
+    result = run_hill_climbing(
+        task_instruction=task,
+        generator=generator,
+        reward_model=reward_model,
+        config=hill_config,
+        output_dir=run_dir,
+    )
+    print("\nTop 3 prompts by reward:")
+    for i, row in enumerate(result["leaderboard"][:3], 1):
+        print(f"\n--- {i}. avg_reward={row['avg_reward']:.4f} ---")
+        print(row["prompt_text"][:600])
+    print(f"\nBest reward: {result['best_avg_reward']:.4f}")
+    print(f"Results saved to {result['output_dir']}")
+    if result.get("invalid_count"):
+        print(f"Invalid (too short) generations: {result['invalid_count']}")
 
 
 if __name__ == "__main__":
