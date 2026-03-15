@@ -1,0 +1,36 @@
+# Prompt optimization (A8): hill climbing to minimize slop
+
+# Reward model (A7) - curriculum checkpoint by default
+reward:
+  checkpoint_path: outputs/classifier_curriculum
+  config_path: configs/classifier_encoder.yaml
+  aggregation_mode: mean
+  device: null
+  batch_size: 16
+
+# Generator (frozen causal LM)
+generator:
+  model_name: gpt2
+  temperature: 0.8
+  top_p: 0.95
+  max_new_tokens: 256
+  do_sample: true
+  device: null
+  batch_size: 4
+
+# Search
+search:
+  population_size: 12
+  top_k: 4
+  children_per_parent: 2
+  num_iterations: 10
+  samples_per_prompt: 2
+  mutation_strength: medium
+  random_seed: 42
+  min_output_length: 20
+  keep_random_explore: 1
+
+# Task / topic (default seed instruction)
+default_task: "Explain the causes of climate change in 2-3 short paragraphs."
+
+output_dir: outputs/prompt_opt
