@@ -1,4 +1,7 @@
-"""Data loading and tokenization for slop minimization."""
+"""Data loading and tokenization for slop minimization.
+
+Lives in slop_src/slop/data/ so Colab can use it after clone (no %%writefile needed).
+"""
 
 from .dataset import load_jsonl, SlopDataset
 from .tokenizer import tokenize_and_align_labels, SlopTokenizer

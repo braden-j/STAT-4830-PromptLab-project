@@ -1,4 +1,7 @@
-"""Dataset classes for slop minimization."""
+"""Dataset classes for slop minimization.
+
+Part of slop_src/slop/data/; provides load_jsonl and SlopDataset for scripts.
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,7 @@
-"""Tokenization and label alignment for per-token slop classification."""
+"""Tokenization and label alignment for per-token slop classification.
+
+Part of slop_src/slop/data/; provides tokenize_and_align_labels and SlopTokenizer.
+"""
 
 from __future__ import annotations
 

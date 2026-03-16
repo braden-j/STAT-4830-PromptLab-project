@@ -1,4 +1,7 @@
-"""Token-level labeling for slop detection from (human_text, slop_text) pairs."""
+"""Token-level labeling for slop detection from (human_text, slop_text) pairs.
+
+Part of slop_src/slop/data/; used by tests and optional pipelines.
+"""
 
 from __future__ import annotations
 
