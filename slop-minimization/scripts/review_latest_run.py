@@ -113,18 +113,27 @@ def main() -> None:
         avg_reward = row.get("avg_reward", 0.0)
         base_reward = row.get("avg_base_reward", avg_reward)
         struct_penalty = row.get("structural_penalty_contribution", row.get("avg_structural_penalty", 0.0))
-        diagnostics = row.get("structural_diagnostics", {})
+        semantic_penalty = row.get("semantic_penalty_contribution", row.get("avg_semantic_penalty", 0.0))
+        struct_diag = row.get("structural_diagnostics", {})
+        semantic_diag = row.get("semantic_diagnostics", {})
         sample = sample_outputs.get(prompt_text, "(no sample in generations.jsonl)")
 
         print("=" * 72)
-        print(f"#{i}  Total reward: {avg_reward:.4f}  |  Base: {base_reward:.4f}  |  Structural penalty: -{struct_penalty:.4f}")
+        print(f"#{i}  Total: {avg_reward:.4f}  |  Base: {base_reward:.4f}  |  Struct: -{struct_penalty:.4f}  |  Semantic: -{semantic_penalty:.4f}")
         print("=" * 72)
         print("PROMPT:")
         print(prompt_text[:700] + ("..." if len(prompt_text) > 700 else ""))
         print()
-        print("STRUCTURAL DIAGNOSTICS (high = more list/bullet/formatting):")
-        if diagnostics:
-            for k, v in sorted(diagnostics.items()):
+        print("STRUCTURAL (high = list/bullet/formatting):")
+        if struct_diag:
+            for k, v in sorted(struct_diag.items()):
+                bar = "█" * int(round(v * 10)) + "░" * (10 - int(round(v * 10)))
+                print(f"  {k}: {v:.3f}  {bar}")
+        else:
+            print("  (none)")
+        print("SEMANTIC (high = meta/advice/off-task; task_relevance high = on-task):")
+        if semantic_diag:
+            for k, v in sorted(semantic_diag.items()):
                 bar = "█" * int(round(v * 10)) + "░" * (10 - int(round(v * 10)))
                 print(f"  {k}: {v:.3f}  {bar}")
         else:
@@ -137,11 +146,10 @@ def main() -> None:
     print("=" * 72)
     print("INTERPRETATION")
     print("=" * 72)
-    print("Higher base_reward = better content/clarity. Higher structural penalty = more")
-    print("bullet/list/formatting; if total reward is high mainly from high base_reward")
-    print("and low structural diagnostics, the prompt is winning on clarity. If base is")
-    print("similar to others but structural penalty is low (format-heavy), it may be")
-    print("benefiting from formatting artifacts.")
+    print("Base = content/clarity. Structural penalty = list/bullet/formatting. Semantic penalty =")
+    print("instruction echo, writing advice, prompt copy, off-task. task_relevance_score high = on-task.")
+    print("Total reward = base - structural - semantic; high total with low semantic penalty and high")
+    print("task_relevance = winning on real clarity rather than meta/format artifacts.")
     print()
 
 

@@ -45,6 +45,9 @@ search:
   lambda_structural: 0.15
   structural_threshold: 0.25
   preserve_one_unmutated_best: true
+  # Semantic penalty: meta-instructional, writing-advice, off-task (default task_keywords derived from default_task)
+  lambda_semantic: 0.12
+  task_keywords: []  # e.g. [inflation, prices, economy]; empty => derive from task instruction
 
 # Task / topic (default seed instruction)
 default_task: "Explain inflation clearly to a college student."

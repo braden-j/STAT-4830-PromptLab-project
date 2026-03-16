@@ -132,17 +132,21 @@ def main() -> None:
     print(result.get("example_generation", "(none)")[:600])
 
     print("\n" + "=" * 60)
-    print("STRUCTURAL DIAGNOSTICS SUMMARY FOR BEST PROMPT")
+    print("STRUCTURAL + SEMANTIC DIAGNOSTICS FOR BEST PROMPT")
     print("=" * 60)
     leaderboard = result.get("leaderboard", [])
     if leaderboard:
         best_row = leaderboard[0]
         struct = best_row.get("structural_diagnostics", {})
+        semantic = best_row.get("semantic_diagnostics", {})
         if struct:
-            for k, v in sorted(struct.items()):
-                print(f"  {k}: {v:.4f}")
+            print("  Structural:", dict(sorted(struct.items())))
         else:
-            print("  (no structural diagnostics)")
+            print("  Structural: (none)")
+        if semantic:
+            print("  Semantic:", dict(sorted(semantic.items())))
+        else:
+            print("  Semantic: (none)")
     else:
         print("  (no leaderboard)")
 

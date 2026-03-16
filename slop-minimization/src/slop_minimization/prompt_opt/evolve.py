@@ -9,6 +9,23 @@ from typing import Any, Callable
 
 from .templates import PromptSpec, render_prompt, get_seeds_for_task, prompt_spec_to_dict, dict_to_prompt_spec, RENDER_MODES
 from .mutations import mutate_spec
+from slop_minimization.scoring.diagnostics import compute_semantic_diagnostics
+
+
+def _task_keywords_from_instruction(task_instruction: str, max_words: int = 10) -> list[str]:
+    """Extract lightweight task keywords from task instruction for relevance scoring."""
+    import re
+    stop = {"the", "a", "an", "to", "in", "on", "for", "of", "and", "or", "is", "are", "be", "by", "with", "as", "your", "you", "that", "this", "it", "if", "when", "how", "what", "why", "can", "should", "use", "write", "explain", "give", "provide"}
+    words = re.findall(r"\b[a-z]{3,}\b", task_instruction.lower())
+    seen = set()
+    out = []
+    for w in words:
+        if w not in stop and w not in seen:
+            seen.add(w)
+            out.append(w)
+            if len(out) >= max_words:
+                break
+    return out
 
 
 def _structural_penalty_from_diagnostics(
@@ -37,6 +54,33 @@ def _structural_penalty_from_diagnostics(
     return penalty, summary
 
 
+def _semantic_penalty_from_outputs(
+    valid_outputs: list[str],
+    prompt_text: str,
+    task_keywords: list[str],
+) -> tuple[float, dict[str, float]]:
+    """Compute semantic penalty (0..1) from meta-instructional and off-task scores. Returns (penalty, summary)."""
+    if not valid_outputs:
+        return 0.0, {}
+    diags = [
+        compute_semantic_diagnostics(out, prompt_text=prompt_text, task_keywords=task_keywords)
+        for out in valid_outputs
+    ]
+    # Combined penalty: meta/advice/echo + low task relevance
+    penalties = []
+    for d in diags:
+        meta = d.get("semantic_meta_score", 0.0)
+        off_task = d.get("semantic_off_task_score", 1.0 - d.get("task_relevance_score", 0.0))
+        penalties.append(min(1.0, 0.6 * meta + 0.4 * off_task))
+    penalty = sum(penalties) / len(penalties) if penalties else 0.0
+    summary = {}
+    for key in ["instruction_echo_ratio", "writing_advice_ratio", "prompt_copy_ratio", "off_task_generic_ratio", "task_relevance_score", "semantic_meta_score"]:
+        vals = [d[key] for d in diags if key in d and isinstance(d.get(key), (int, float))]
+        if vals:
+            summary[key] = sum(vals) / len(vals)
+    return penalty, summary
+
+
 def evaluate_prompt(
     prompt_spec: PromptSpec,
     generator: Any,
@@ -47,17 +91,23 @@ def evaluate_prompt(
     render_mode: str = "structured",
     lambda_structural: float = 0.0,
     structural_threshold: float = 0.25,
+    lambda_semantic: float = 0.0,
+    task_instruction: str | None = None,
+    task_keywords: list[str] | None = None,
 ) -> dict[str, Any]:
     """Generate n_samples from the prompt, score with reward model, return averaged metrics and diagnostics.
 
     Outputs below min_length (word count) are rejected and not scored; they are counted in invalid_count.
-    When lambda_structural > 0, a structural penalty is applied: total reward = base_reward - lambda_structural * penalty.
+    Penalties: total reward = base_reward - lambda_structural * structural_penalty - lambda_semantic * semantic_penalty.
+    task_keywords used for task relevance; if None and task_instruction provided, derived from task_instruction.
     """
     import random
     rng = rng or random.Random(42)
     if render_mode not in RENDER_MODES:
         render_mode = "structured"
     prompt_text = render_prompt(prompt_spec, mode=render_mode)
+    keywords = task_keywords if task_keywords is not None else (_task_keywords_from_instruction(task_instruction) if task_instruction else [])
+
     outputs: list[str] = []
     for _ in range(n_samples):
         out = generator.generate_one(prompt_text)
@@ -77,9 +127,13 @@ def evaluate_prompt(
             "avg_reward": -1.0,
             "avg_base_reward": -1.0,
             "avg_structural_penalty": 0.0,
+            "structural_penalty_contribution": 0.0,
+            "avg_semantic_penalty": 0.0,
+            "semantic_penalty_contribution": 0.0,
             "avg_doc_slop_score": 1.0,
             "diagnostics_summary": {},
             "structural_diagnostics": {},
+            "semantic_diagnostics": {},
             "error": "all outputs below min_length",
         }
 
@@ -102,8 +156,14 @@ def evaluate_prompt(
     structural_penalty, structural_diagnostics = _structural_penalty_from_diagnostics(
         diagnostics, threshold=structural_threshold
     )
-    penalty_contribution = lambda_structural * structural_penalty
-    avg_reward = avg_base_reward - penalty_contribution
+    structural_contribution = lambda_structural * structural_penalty
+
+    semantic_penalty, semantic_diagnostics = _semantic_penalty_from_outputs(
+        valid_outputs, prompt_text, keywords
+    )
+    semantic_contribution = lambda_semantic * semantic_penalty
+
+    avg_reward = avg_base_reward - structural_contribution - semantic_contribution
 
     return {
         "prompt_spec": prompt_spec_to_dict(prompt_spec),
@@ -115,10 +175,13 @@ def evaluate_prompt(
         "avg_reward": avg_reward,
         "avg_base_reward": avg_base_reward,
         "avg_structural_penalty": structural_penalty,
-        "structural_penalty_contribution": penalty_contribution,
+        "structural_penalty_contribution": structural_contribution,
+        "avg_semantic_penalty": semantic_penalty,
+        "semantic_penalty_contribution": semantic_contribution,
         "avg_doc_slop_score": avg_doc_slop_score,
         "diagnostics_summary": diag_summary,
         "structural_diagnostics": structural_diagnostics,
+        "semantic_diagnostics": semantic_diagnostics,
         "error": None,
     }
 
@@ -139,6 +202,9 @@ class HillClimbConfig:
     lambda_structural: float = 0.15
     structural_threshold: float = 0.25  # penalty ramps above this abnormal_punctuation_density
     preserve_one_unmutated_best: bool = True  # keep one copy of best spec unmutated in next population
+    # Semantic penalty: discourage meta-instructional, writing-advice, off-task outputs (A8 refinement)
+    lambda_semantic: float = 0.12
+    task_keywords: list[str] = field(default_factory=list)  # for task relevance; empty => derive from task_instruction
 
 
 def run_hill_climbing(
@@ -192,6 +258,8 @@ def run_hill_climbing(
                 "lambda_structural": getattr(config, "lambda_structural", 0.0),
                 "structural_threshold": getattr(config, "structural_threshold", 0.25),
                 "preserve_one_unmutated_best": getattr(config, "preserve_one_unmutated_best", True),
+                "lambda_semantic": getattr(config, "lambda_semantic", 0.0),
+                "task_keywords": getattr(config, "task_keywords", []) or [],
             }
             yaml.dump(cfg_dict, f, default_flow_style=False)
 
@@ -209,6 +277,9 @@ def run_hill_climbing(
                 render_mode=config.render_mode,
                 lambda_structural=getattr(config, "lambda_structural", 0.0),
                 structural_threshold=getattr(config, "structural_threshold", 0.25),
+                lambda_semantic=getattr(config, "lambda_semantic", 0.0),
+                task_instruction=task_instruction,
+                task_keywords=config.task_keywords if getattr(config, "task_keywords", None) else None,
             )
             if res.get("invalid_count", 0) > 0 and res.get("outputs"):
                 for i, out in enumerate(res["outputs"]):
@@ -274,7 +345,10 @@ def run_hill_climbing(
                     "avg_base_reward": row.get("avg_base_reward", row["avg_reward"]),
                     "avg_structural_penalty": row.get("avg_structural_penalty", 0.0),
                     "structural_penalty_contribution": row.get("structural_penalty_contribution", 0.0),
+                    "avg_semantic_penalty": row.get("avg_semantic_penalty", 0.0),
+                    "semantic_penalty_contribution": row.get("semantic_penalty_contribution", 0.0),
                     "structural_diagnostics": row.get("structural_diagnostics", {}),
+                    "semantic_diagnostics": row.get("semantic_diagnostics", {}),
                     "avg_doc_slop_score": row["avg_doc_slop_score"],
                     "generation_count": row.get("generation_count", 0),
                     "iteration_found": iteration_found.get(row["prompt_text"], -1),
@@ -290,7 +364,9 @@ def run_hill_climbing(
                     "avg_reward": c["avg_reward"],
                     "avg_base_reward": c.get("avg_base_reward", c["avg_reward"]),
                     "structural_penalty_contribution": c.get("structural_penalty_contribution", 0.0),
+                    "semantic_penalty_contribution": c.get("semantic_penalty_contribution", 0.0),
                     "structural_diagnostics": c.get("structural_diagnostics", {}),
+                    "semantic_diagnostics": c.get("semantic_diagnostics", {}),
                     "outputs": c.get("valid_outputs", [])[:3],
                 }) + "\n")
         if invalid_generations:
@@ -304,8 +380,9 @@ def run_hill_climbing(
             f.write("## Top 5 prompts by reward\n\n")
             for i, row in enumerate(leaderboard[:5], 1):
                 base = row.get("avg_base_reward", row["avg_reward"])
-                pen = row.get("structural_penalty_contribution", 0.0)
-                f.write(f"### {i}. reward={row['avg_reward']:.4f} (base={base:.4f}, structural_penalty={pen:.4f})\n\n")
+                sp = row.get("structural_penalty_contribution", 0.0)
+                mp = row.get("semantic_penalty_contribution", 0.0)
+                f.write(f"### {i}. reward={row['avg_reward']:.4f} (base={base:.4f}, struct_pen={sp:.4f}, semantic_pen={mp:.4f})\n\n")
                 f.write(f"```\n{row['prompt_text']}\n```\n\n")
 
     return {
