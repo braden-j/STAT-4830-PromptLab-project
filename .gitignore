@@ -1,24 +1,29 @@
-# Ignore everything in figures directory except PNGs and TEX files
-docs/figures/*
-!docs/figures/*.png
-!docs/figures/*.tex
-
-local/
-
-# System
-.DS_Store
-
 # Python
 __pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
 
-# Secrets
-.env
+# Virtual envs
+.venv/
+venv/
+.python-version
 
-# Model checkpoints
-*.pt
-*.ckpt
-checkpoints/
+# Data & outputs
+data/raw/
+data/*.jsonl
+outputs/
+*.bin
+*.safetensors
 
-# Logs & data
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Logs
 wandb/
-data/
+*.log
