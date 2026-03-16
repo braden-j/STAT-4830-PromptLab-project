@@ -12,6 +12,7 @@ reward:
 # Recommended presets (uncomment one or override with --generator-model):
 #   - gpt2: baseline, fastest, weakest instruction-following (Colab-safe).
 #   - TinyLlama/TinyLlama-1.1B-Chat-v1.0: small instruct, better on-task; ~1.1B params, slower than gpt2.
+#   - Qwen/Qwen2.5-0.5B-Instruct: 0.5B instruct; strong instruction-following for size, Colab-friendly.
 #   - microsoft/phi-2: stronger 2.7B instruct; best quality, needs more Colab RAM/GPU.
 #   - HuggingFaceTB/SmolLM2-360M-Instruct: tiny instruct fallback; faster than gpt2, better than gpt2.
 generator:
