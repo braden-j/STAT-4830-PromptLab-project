@@ -10,7 +10,7 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "slop_src"))
 
-from slop.data.dataset import load_jsonl
+from slop.dataset_io import load_jsonl
 from slop.slop_gen import RuleSloppifier
 from slop.slop_gen.train_rewriter import train_rewriter
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Generate concrete parent -> child examples for each semantic mutation helper.
-No model or network required. Run from repo root: python scripts/audit_semantic_mutations.py
+No model or network required. Run from repo root:
+  PYTHONPATH=<repo>/slop_src python slop_scripts/audit_semantic_mutations.py
 """
 from __future__ import annotations
 

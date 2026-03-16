@@ -17,8 +17,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "slop_src"))
 
 from slop.config import Config
-from slop.data.dataset import load_jsonl
-from slop.data.tokenizer import tokenize_and_align_labels
+from slop.dataset_io import load_jsonl
+from slop.tokenizer_utils import tokenize_and_align_labels
 from slop.models import create_classifier_and_tokenizer
 from slop.metrics import (
     token_level_f1,

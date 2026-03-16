@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "slop_src"))
 
-from slop.data.token_labels import (
+from slop.token_labels import (
     build_token_label_examples,
     detect_sloppy_spans,
     spans_to_token_labels,

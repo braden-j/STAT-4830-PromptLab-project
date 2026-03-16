@@ -9,8 +9,8 @@ import torch
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "slop_src"))
 
-from slop.data.dataset import load_jsonl
-from slop.data.tokenizer import SlopTokenizer
+from slop.dataset_io import load_jsonl
+from slop.tokenizer_utils import SlopTokenizer
 from slop.scoring import compute_reward, aggregate_token_scores
 
 
