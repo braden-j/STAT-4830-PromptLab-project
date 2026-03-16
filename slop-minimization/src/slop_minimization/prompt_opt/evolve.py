@@ -355,3 +355,63 @@ def compare_rendering_modes(
         }
 
     return results
+
+
+def compare_generators(
+    task_instruction: str,
+    generators: list[tuple[str, Any]],  # [(label, generator), ...]
+    reward_model: Any,
+    render_mode: str = "simple",
+    seed_specs: list[PromptSpec] | None = None,
+    n_samples: int = 3,
+    min_length: int = 20,
+    rng: Any = None,
+) -> dict[str, Any]:
+    """Compare the same task and seed prompts across multiple generator models.
+
+    Uses the same reward model and render_mode for each. For each generator, returns
+    average reward, per-seed rewards, and example outputs.
+    """
+    import random
+    rng = rng or random.Random(42)
+    if render_mode not in RENDER_MODES:
+        render_mode = "structured"
+    seeds = seed_specs or get_seeds_for_task(task_instruction)
+    seeds = seeds[:3]
+
+    reward_model.load()
+    results: dict[str, Any] = {
+        "task_instruction": task_instruction,
+        "render_mode": render_mode,
+        "n_samples": n_samples,
+        "generators": {},
+    }
+
+    for label, generator in generators:
+        mode_rewards: list[float] = []
+        mode_examples: list[str] = []
+        for spec in seeds:
+            res = evaluate_prompt(
+                spec,
+                generator,
+                reward_model,
+                n_samples=n_samples,
+                min_length=min_length,
+                rng=rng,
+                render_mode=render_mode,
+            )
+            mode_rewards.append(res["avg_reward"])
+            if res.get("valid_outputs"):
+                mode_examples.append(res["valid_outputs"][0][:400])
+            elif res.get("outputs"):
+                mode_examples.append(res["outputs"][0][:400] if res["outputs"] else "")
+            else:
+                mode_examples.append("")
+        avg_reward = sum(mode_rewards) / len(mode_rewards) if mode_rewards else -1.0
+        results["generators"][label] = {
+            "avg_reward": avg_reward,
+            "per_seed_rewards": mode_rewards,
+            "example_outputs": mode_examples,
+        }
+
+    return results

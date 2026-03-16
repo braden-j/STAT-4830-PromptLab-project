@@ -17,6 +17,7 @@ from .evolve import (
     HillClimbConfig,
     compare_seed_vs_optimized,
     compare_rendering_modes,
+    compare_generators,
 )
 
 __all__ = [
@@ -35,4 +36,5 @@ __all__ = [
     "HillClimbConfig",
     "compare_seed_vs_optimized",
     "compare_rendering_modes",
+    "compare_generators",
 ]

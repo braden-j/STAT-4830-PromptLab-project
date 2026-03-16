@@ -8,8 +8,12 @@ reward:
   device: null
   batch_size: 16
 
-# Generator (frozen causal LM) - small model for Colab
-# Optional: try a small instruction model, e.g. TinyLlama/TinyLlama-1.1B-Chat-v1.0 or microsoft/phi-2
+# Generator (frozen causal LM). Swap model_name to use a different model; all presets work with this block.
+# Recommended presets (uncomment one or override with --generator-model):
+#   - gpt2: baseline, fastest, weakest instruction-following (Colab-safe).
+#   - TinyLlama/TinyLlama-1.1B-Chat-v1.0: small instruct, better on-task; ~1.1B params, slower than gpt2.
+#   - microsoft/phi-2: stronger 2.7B instruct; best quality, needs more Colab RAM/GPU.
+#   - HuggingFaceTB/SmolLM2-360M-Instruct: tiny instruct fallback; faster than gpt2, better than gpt2.
 generator:
   model_name: gpt2
   temperature: 0.8
@@ -20,7 +24,8 @@ generator:
   batch_size: 4
   repetition_penalty: 1.1
   no_repeat_ngram_size: 3
-  eos_token_id: null  # set from tokenizer if null; use to stop at EOS when supported
+  eos_token_id: null
+  max_prompt_length: 1024
 
 # Search (small default budget for quick validation)
 search:
