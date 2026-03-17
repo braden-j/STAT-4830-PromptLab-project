@@ -1,172 +1,308 @@
-# Slop Minimization: Classifier + Prompt Optimization
+# STAT 4830 Project Repository
 
-This repo implements a pipeline to **detect** low-quality (“slop”) text with a learned classifier and **reduce** slop by optimizing prompts for a frozen LLM using that classifier as a reward signal. The document below is in two parts: a high-level overview (like the slides, but more verbose) and a granular, project-specific guide to directories, models, and scripts.
+Welcome to your project repository! This template helps you develop and implement an optimization project over the semester.
 
----
+## Getting Started
 
-## Part 1 — High-level: What the project does
+1. **Finding Your Project Idea**
+   - Start with our [Project Ideas Guide](docs/finding_project_ideas.md)
+   - Use AI to explore and refine your ideas
+   - Take time to find something you care about
 
-### The problem
+   It's very important you learn to use AI tools in your work! [Noam Brown](https://x.com/polynoamial/status/1870307185961386366) (OpenAI) says that students should...
+   > Practice working with AI. Human+AI will be superior to human or AI alone for the foreseeable future. Those who can work most effectively with AI will be the most highly valued.
 
-As model-generated text floods the web, “slop”—generic, low-quality, or obviously AI-written content—becomes a problem for search, ranking, and trust. We want to:
+   ![Noam tweet](figures/noam.png)
 
-1. **Recognize** slop: score or classify text as human-quality vs slop.
-2. **Reduce** slop: influence what an LLM outputs by choosing better prompts, so that the same model produces less sloppy text when given those prompts.
+2. **Week 4 Deliverable**
+  - Follow the [Week 4 Instructions](docs/assignments/week4_deliverable_instructions.md)
+   - Required components:
+     - Initial report draft
+     - Self-critique document analyzing your report's strengths and weaknesses
+     - Supporting Jupyter notebooks/code
+  - Due: Friday, February 6, 2026
 
-We do **not** fine-tune the LLM’s weights in this pipeline. We train a **verifier** (classifier) on text, then use it as a **reward model** and optimize **prompts** so that the frozen LLM’s outputs get higher reward (i.e., look less like slop under the verifier).
+## Project Development Cycle
 
----
+Each week follows an OODA (Observe, Orient, Decide, Act) loop that helps you improve your project systematically:
 
-### Mathematical formulation (two stages)
+![Project Development Cycle - A diagram showing the OODA loop (Observe, Orient, Decide, Act) adapted for project development. Each phase has specific activities: Observe (Review Report, Check Results), Orient (Write Critique, Find Gaps), Decide (Plan Changes, Set Goals), and Act (Code, Run Tests). The phases are connected by arrows showing the flow of work, with a feedback loop labeled "Iterative Development" completing the cycle.](docs/figures/ooda_loop.png)
 
-**Stage 1 — Train a binary verifier (classifier)**  
-We fit a model \( f_\phi \) so that \( f_\phi(x) = P(\text{human} \mid x) \): the probability that a piece of text \( x \) is human-quality (non-slop). We treat this as binary classification:
+Each cycle produces specific deliverables:
+- OBSERVE: Updated report draft
+- ORIENT: Self-critique document
+- DECIDE: Next actions plan
+- ACT: Code changes & results
 
-- **Input:** Text \( x \) (the “generated output” in the slide: we train on labeled human vs slop sentences).
-- **Label:** \( y \in \{0,1\} \): \( 1 = \) human-quality / non-slop, \( 0 = \) slop / generic.
-- **Objective:** Minimize cross-entropy (binary classification loss):
-  \[
-  \min_\phi \;\mathbb{E}_{(x,y)} \bigl[ y \log f_\phi(x) + (1-y) \log(1 - f_\phi(x)) \bigr].
-  \]
+See the [Week 4 Instructions](docs/assignments/week4_deliverable_instructions.md) for detailed guidance on writing your first self-critique.
 
-This gives a **calibrated** predictor: confident wrong predictions are penalized heavily, and the resulting scores can be used later as a reward. In this project, the classifier is **token-level** (per-word labels) with a document-level score used as the reward.
+## Project Schedule
 
-**Stage 2 — Optimize prompts to maximize reward**  
-With the verifier fixed, we then maximize the expected reward of the **output** of a frozen LLM when we feed it prompts we control:
+### Deliverables (Due Fridays)
+- Week 2 (Jan 23): Email Project Team Names to Ai, Jiahao <jiahaoai@wharton.upenn.edu>
+- Week 4 (Feb 6): Report Draft 1 + Code + Self Critique
+- Week 5 (Feb 13): Slides Draft 1
+- Week 6 (Feb 20): Report Draft 2 + Code + Self Critique
+- Week 7 (Feb 27): Slides Draft 2
+- Week 8: ⚡ Lightning Talks in Class (Mar 3/5) & Report Draft 3 due Friday ⚡
+- Spring Break (Mar 7-15)
+- Week 9 (Mar 20): Slides Draft 3
+- Week 10 (Mar 27): Report Draft 4 + Code + Self Critique
+- Week 11 (Apr 3): Slides Draft 4
+- Week 12 (Apr 10): Report Draft 5 + Code + Self Critique
+- Week 13 (Apr 17): Slides Draft 5
+- Week 14 (Apr 21/23): Final Presentations in Class
+- Week 15 (Apr 28): Final Report + Code + Self Critique
 
-- **Goal:** \( \max_{\pi} \;\mathbb{E}_{p \sim \pi}\bigl[ R(G(p)) \bigr] \), where  
-  - \( p \) = prompt (sampled from some search distribution),  
-  - \( G \) = **frozen** LLM (generator),  
-  - \( G(p) \) = generated text,  
-  - \( R \) = **learned verifier** (our classifier), used as the reward.
+Note: Instructions for peer feedback will be added throughout the semester for each deliverable.
 
-So: **Prompt → LLM → Output → Score with R.** We search over prompts (e.g., by hill climbing) to get outputs that score higher under \( R \) (i.e., less slop).
+Each draft builds on the previous one, incorporating feedback and new results. You'll meet with course staff three times during the semester to discuss your progress.
 
-In the slide, “\( \pi_\theta \)” is a prompt distribution; in this codebase we use **discrete search** (hill climbing over a population of prompt strings) rather than a parameterized \( \pi_\theta \), but the high-level idea is the same: optimize what we feed the LLM so that \( R(G(p)) \) is higher.
+## Project Grading
 
----
+Each deliverable is graded on five components:
+- Report (20%): Problem statement, methodology, results
+- Implementation (35%): Working code, tests, experiments
+- Development Process (15%): Logs, decisions, iterations
+- Critiques (15%): Reflection and planning
+  - Self-critiques (required)
+  - Peer critiques (when assigned)
+  - Response to feedback
+- Repository Structure (15%): Organization, documentation, clarity
 
-### Pipeline in plain language
+Remember:
+- Quality > Quantity
+- Working > Perfect
 
-1. **Data:** Build train/val/test sets of text with labels (human vs slop). Optionally use curriculum (easy/medium/hard) for training.
-2. **Classifier:** Train a token-level classifier (e.g., DistilBERT + LoRA) with cross-entropy. Save it; this is your **verifier** \( R \).
-3. **T5 rewriter (optional):** Train a small T5 to turn “good” sentences into “slop” versions; used to generate more slop training pairs. Not required for the core “classifier + prompt optimization” loop.
-4. **Prompt optimization:** With a **frozen** generator \( G \) (e.g., TinyLlama) and the **frozen** classifier \( R \), run hill climbing over prompts: mutate prompts, generate with \( G \), score with \( R \), keep high-reward prompts and iterate. Outputs are optimized prompts and run summaries.
-5. **Evaluate:** Report classifier metrics (mean reward, sequence accuracy on test set), reward-model stats, and a short summary of the latest prompt-optimization run.
+## Repository Structure
 
-End-to-end: **Data → Train verifier \( R \) → (Optional: T5 slop rewriter) → Optimize prompts for frozen \( G \) using \( R \) → Quantify progress.**
+```
+your-repo/
+├── README.md                    # This file
+├── report.md                    # Your project report
+├── notebooks/                   # Jupyter notebooks
+├── src/                        # Source code
+├── tests/                      # Test files
+└── docs/
+    ├── finding_project_ideas.md    # Guide to finding your project
+    ├── assignments/                # Assignment instructions
+    ├── llm_exploration/           # AI conversation logs
+    └── development_log.md         # Progress & decisions
+```
 
----
+## Development Environment
 
-## Part 2 — Granular: This repo’s layout and how to run it
+### Editor Setup
+We recommend using **Cursor**. Students with a `.edu` address get **one year of Cursor Pro for free**: https://cursor.com/students. Cursor is VS Code–compatible (same shortcuts/extensions) but adds in-IDE AI assistance tuned for multi-file context and refactors.
 
-### Repository layout (main pieces)
+### Required Tools
+- Python 3.10+
+- PyTorch
+- Jupyter Notebook/Lab
+- Git
 
-- **`slop_src/slop/`** — Python package: models, data loading, tokenization, scoring, prompt optimization.
-- **`slop_scripts/`** — CLI entry points: build data, train classifier, train T5, run prompt optimization, eval, comparisons.
-- **`slop_configs/`** — YAML configs for classifier, prompt optimization, reward, and small/default runs.
-- **`slop_docs/`** — Docs; **`COLAB_CELLS.md`** is the canonical “run in Colab” cell-by-cell guide.
-- **`slop_tests/`** — Tests for tokenization, scoring, etc.
-- **`data/`** — Built datasets (train/val/test JSONL); produced by `build_data.py` (inputs live under `data/raw/` if you use your own good/slop files).
-- **`outputs/`** — All trained artifacts (classifier, T5 rewriter, prompt-opt runs). Gitignored; persist via zip or Google Drive.
+## Git Setup and Workflow
 
-There is also a **`slop-minimization/`** subfolder with its own structure (notebooks, different scripts); the **canonical pipeline** described here is **`slop_src` + `slop_scripts` + `slop_configs`**, as in **`slop_docs/COLAB_CELLS.md`**.
+### First Time Setup
+1. Fork this repository
+   - Click "Fork" in the top right
+   - Name it `STAT-4830-[team-name]-project`
+   - This creates your own copy that can receive updates
 
----
+2. Set up Git (if you haven't already):
+   Cursor includes Git integration and prompts you to install Git if it's missing.
+   
+   For detailed instructions, see the [Official Git installation guide](https://github.com/git-guides/install-git)
 
-### Directories and roles
+   After installing, set up your identity:
+   ```bash
+   git config --global user.name "Your Name"
+   git config --global user.email "your.email@upenn.edu"
+   ```
 
-| Path | Role |
-|------|------|
-| `slop_src/slop/` | Core library: classifier models, data, tokenizer utils, scoring (reward), prompt_opt (templates, mutations, generator, hill climbing). |
-| `slop_src/slop/models/` | `token_classifier.py` (EncoderSlopClassifier, SlopTokenClassifier), `classifier_factory.py` (create_classifier_and_tokenizer), `slop_generator.py` (T5 rewriter). |
-| `slop_src/slop/scoring/` | Reward model wrapper (`reward.py`), aggregation, diagnostics. |
-| `slop_src/slop/prompt_opt/` | PromptSpec, render modes, mutations, `FrozenGenerator`, `run_hill_climbing`, `compare_seed_vs_optimized`. |
-| `slop_src/slop/data/` | Dataset and token-label utilities. |
-| `slop_scripts/` | All runnable scripts; see table below. |
-| `slop_configs/` | `classifier_encoder.yaml`, `prompt_opt.yaml`, `reward.yaml`, etc. |
-| `data/` | `train.jsonl`, `val.jsonl`, `test.jsonl` (and optionally `slop_pairs.jsonl` for T5). |
-| `outputs/` | `classifier_curriculum/`, `slop_rewriter/`, `prompt_opt/`, `eval_results.json`. |
+3. Clone your fork:
+   ```bash
+   # HTTPS (easier):
+   git clone https://github.com/[your-username]/STAT-4830-[team-name]-project.git
 
----
+   # SSH (if you've set up SSH keys):
+   git clone git@github.com:[your-username]/STAT-4830-[team-name]-project.git
+   
+   cd STAT-4830-[team-name]-project
+   ```
 
-### Key scripts (what runs what)
+4. Add upstream remote (to get updates):
+   ```bash
+   # HTTPS:
+   git remote add upstream https://github.com/damek/STAT-4830-project-base.git
 
-| Script | Purpose |
-|--------|--------|
-| `build_data.py` | Build train/val/test JSONL from good/slop text (or placeholders). Writes to `data/`. |
-| `train_token_classifier.py` | Train the verifier (encoder + LoRA). Reads `slop_configs/classifier_encoder.yaml`; writes `outputs/classifier_curriculum` (or path you set). Saves `pytorch_model.bin`, tokenizer, and `model_config.json`. |
-| `train_slop_generator.py` | Generate slop pairs and/or train T5 rewriter. Writes `data/slop_pairs.jsonl`, `outputs/slop_rewriter`. |
-| `optimize_prompts.py` | Hill-climb prompts using frozen generator + reward model. Reads `slop_configs/prompt_opt.yaml`; writes to `outputs/prompt_opt/`. |
-| `eval.py` | Evaluate classifier on test set (mean reward, sequence accuracy). Writes `outputs/eval_results.json`. Loads classifier via `model_config.json` (or backward-compat default). |
-| `eval_reward_model.py` | Score a JSONL with the reward model; report mean/std and optional top/bottom examples. |
-| `score_reward.py` | CLI: score raw text or a file with the reward model. |
-| `eval_prompts.py` | Compare seed vs optimized prompts (mean reward, etc.) for a run. |
-| `review_latest_run.py` | Print top prompts and diagnostics for the latest prompt-opt run. |
-| `compare_*.py` | Compare generators, structure styles, rendering modes, or reward checkpoints. |
-| `validate_dataset.py`, `build_classifier_dataset.py` | Data validation and alternate dataset building. |
+   # SSH:
+   git remote add upstream git@github.com:damek/STAT-4830-project-base.git
+   ```
 
-All scripts assume you run from repo root with `PYTHONPATH` including the repo’s `slop_src` (e.g. `PYTHONPATH=$PWD/slop_src python slop_scripts/script_name.py ...`).
+5. Add your team members as collaborators:
+   - Go to your repo on GitHub
+   - Settings → Collaborators → Add people
+   - Add using their GitHub usernames
 
----
+### Working on Your Project
+1. Create a new branch:
+   ```bash
+   git checkout -b exploration
+   ```
 
-### Configs (what to tweak)
+2. Make changes and commit:
+   ```bash
+   git add .
+   git commit -m "Description of changes"
+   git push origin exploration
+   ```
 
-- **`slop_configs/classifier_encoder.yaml`** — Backbone (e.g. DistilBERT), LoRA, max_length, training (batch size, epochs, early stopping), data paths, curriculum. Override output with `--output-dir`.
-- **`slop_configs/prompt_opt.yaml`** — Reward checkpoint and aggregation; generator model (e.g. TinyLlama), temperature, max_new_tokens; search (population_size, num_iterations, mutation, structural/semantic/quality weights); default_task and output_dir. Used by `optimize_prompts.py`.
-- **`slop_configs/reward.yaml`** — Reward-model-only options if you run scoring scripts with a shared config.
+### Getting Updates
+When the base repository is improved:
+```bash
+# Get updates
+git fetch upstream
+git checkout main
+git merge upstream/main
 
----
+# Update your branch
+git checkout exploration
+git merge main
+```
 
-### Models and artifacts
+### Troubleshooting
+- Having Git issues? Post on Ed Discussion
+- Can't push/pull? Check if you're using HTTPS or SSH
+- Windows path too long? Enable long paths:
+  ```bash
+  git config --system core.longpaths true
+  ```
 
-- **Classifier (verifier)** — Encoder (e.g. DistilBERT) + LoRA + token classification head. Trained with cross-entropy on (text, human/slop) labels. Saved under `outputs/classifier_curriculum/`: `pytorch_model.bin`, tokenizer files, `model_config.json`. Used as \( R \) in prompt optimization and in `eval.py` / `eval_reward_model.py` / `score_reward.py`.
-- **T5 slop rewriter** — Optional; generates (human → slop) pairs for data augmentation. Saved under `outputs/slop_rewriter/`.
-- **Prompt-optimization runs** — Under `outputs/prompt_opt/`: per-run dirs (e.g. `run_*`), `best_prompts.json`, diagnostics. No separate “model”; the “output” is the set of optimized prompts and metadata.
+## Getting Help
+- Use AI tools (ChatGPT, GitHub Copilot)
+- See course staff for technical issues
+- Document your progress
 
----
 
-### How to run: Colab vs local
+## Spring 2025 Project Examples
 
-- **Colab (recommended for full pipeline):** Follow **`slop_docs/COLAB_CELLS.md`** step by step. Clone repo, set `PROJECT_ROOT`, install deps, then run cells in order: GPU check → clone/setup → install → layout → build data → train classifier → generate slop pairs → train T5 → prompt optimization → “Show progress” cells (eval, reward-model stats, prompt-opt summary) → zip (and optionally Drive). Each cell has a short comment at the top describing what it does.
-- **Local:** Same order, but run the commands from the cells in your shell (using `cd $PROJECT_ROOT && PYTHONPATH=$PROJECT_ROOT/slop_src python slop_scripts/...`). Ensure `data/` exists (run `build_data.py` or drop in your own train/val/test JSONL).
-- **Quick validation after code changes:** Clone (or pull), install deps, restore artifacts from a previous run (e.g. unzip `slop_critical_artifacts.zip` into `outputs/` or copy from Drive). Then run only the “Show progress” and eval cells so you don’t retrain everything.
+Current student projects:
 
----
+1. **Decentralized Recommendation for Cold-Start Personalization**  
+   * **Summary:** Builds a cross-platform fashion recommender for users with little history. Synthesizes persona-level ratings, embeds ~3k products with CLIP image/text vectors, and benchmarks content-based filtering, collaborative filtering, low-rank matrix factorization, and a two-tower deep model. Evaluates RMSE/MAE and Precision/Recall@K to trade off global error vs. top-K relevance under cold-start.  
+   * **Link:** [Final Report](https://github.com/kuomat/STAT-4830-vllm-project/blob/main/Final%20Report.pdf)
 
-### Outputs and persistence
+2. **Optimizing Attention Mechanisms in Transformer Models**  
+   * **Summary:** Replaces $O(n^2)$ attention with efficient variants: learned sparse masks, Performer-style kernelized attention, and hierarchical sparsity. Trains on WikiText-2, minimizing KL-divergence to a baseline Transformer while tracking cross-entropy, coherence, and memory/latency. Shows custom masks preserve fluency with lower compute.  
+   * **Link:** [Final Report](https://github.com/charisgao/STAT-4830-Optimizing-Attention-Project/blob/main/docs/report.md)
 
-- **`outputs/`** is gitignored. To keep artifacts across Colab sessions: use **Cell 10** (zip) and download the zip, and/or the **Optional** cell to copy to Google Drive. To reload later: upload the zip and unzip into `outputs/`, or mount Drive and copy from `MyDrive/slop_pipeline` into `outputs/`.
-- Eval and reward scripts write to paths like `outputs/eval_results.json`; prompt-opt writes under `outputs/prompt_opt/`. The “Show progress” section in `COLAB_CELLS.md` summarizes how to read these and where you are in the pipeline.
+3. **Poker Zero: Risk-Aware Agents for No-Limit Hold'em**  
+   * **Summary:** Designs a poker agent that blends LLM-guided reasoning with self-play reinforcement learning. Uses counterfactual regret minimization heuristics and win-rate/stack-size metrics against GTO-style opponents to study bluffing, bet sizing, and stability under incomplete information.  
+   * **Link:** [Final Report](https://github.com/AC2005/STAT-4830-poker/blob/main/docs/Final%20Report.pdf)
 
----
+4. **Portfolio Refinement Through Iterative Sequential Modeling (PRISM)**  
+   * **Summary:** Optimizes daily portfolios with penalties on drawdown, turnover, and concentration. Formulates a multi-objective loss, applies sequential modeling to adapt weights, and benchmarks Sharpe, max drawdown, and turnover against “safe” baselines.  
+   * **Link:** [Final Report](https://github.com/dhruv575/STAT-4830-project-base/blob/main/report.md)
 
-### Dependencies (high level)
+5. **Optimization in Preference Learning**  
+   * **Summary:** Predicts hotel choices using two pipelines: mixture preference models optimized via Frank–Wolfe variants, and low-rank matrix completion with bias-aware initialization and Huber loss. Expedia-derived data backtests show linear preference models outperform deeper nets under sparsity, while matrix completion boosts robustness.  
+   * **Link:** [Final Report](https://github.com/Lexaun-chen/STAT-4830-Group-Project/blob/main/Final_Report.pdf)
 
-- PyTorch, transformers, datasets, peft, accelerate, pyyaml, tqdm, scikit-learn, sentencepiece. Install with the commands in `COLAB_CELLS.md` (Cell 3) or your local env.
+6. **Designing Good Rewards for Reinforcement Learning on LLMs**  
+   * **Summary:** Implements GRPO on Qwen-1.5B for GSM8K-style reasoning, comparing rule-based vs. hybrid perplexity rewards. Early experiments on matrix inversion validate dense rewards; hybrid absolute/relative perplexity improves stability over naive reward shaping.  
+   * **Link:** [Final Report](https://github.com/JustinSQiu/STAT-4830-curriculum-learning-project/blob/main/report.md)
 
----
+7. **SAT Formula Extraction via Transformer Optimization**  
+   * **Summary:** Fine-tunes FLAN-T5 to emit symbolic formulas for SAT word problems, then solves them with SymPy. Uses GRPO-style training, regex parsing, and answer-level checks; reports ~81% symbolic similarity and ~72% answer accuracy with a formula-to-answer pipeline.  
+   * **Link:** [Final Report](https://github.com/awu626/STAT-4830-project/blob/main/FinalReport.md)
 
-## Next steps
+8. **Modeling Human Behavior Without Humans – Bringing Prospect Theory to Multi-Agent RL**  
+   * **Summary:** Extends MADDPG with cumulative prospect theory transforms (CPT-MADDPG) to control risk attitudes. Evaluates on Simple Tag/Spread and first-price auctions; shows risk-seeking CPT speeds early learning, loss-averse CPT enforces prudence, and shared utility aggregation preserves coordination.  
+   * **Link:** [Final Report](https://github.com/sheyanlalmohammed1/STAT-4830-CPT-MARL-project/blob/main/report.pdf)
 
-Planned or natural extensions of the current pipeline:
+9. **Sleep is All We Need: Optimizing EEG-Based Deep Learning Models for N1 Sleep Onset Detection**  
+   * **Summary:** Builds a two-stage ensemble for detecting the rare N1 sleep stage from single-channel EEG. Combines convolutional encoders, domain-specific PSD/Catch22 features, a transformer sequence model, and an N1-focused detector, improving N1 F1 from 0.38 to 0.53 while maintaining overall accuracy.  
+   * **Link:** [Final Report](https://github.com/kimberlyliang/STAT-4830-GOALZ-project/blob/main/report.pdf)
 
-**Search and prompt optimization (more parameters)**  
-- **Hill-climbing:** Larger population, more iterations, and more samples per prompt; tune mutation strength, exploration rate, and top-k selection. Config knobs live in `slop_configs/prompt_opt.yaml` under `search`.
-- **Prompt mutations:** Richer mutation operators (structural, semantic, length, format) and higher semantic-mutation probability to escape local optima. The codebase already supports structural vs semantic penalties and quality-reward terms; these can be expanded or reweighted.
-- **Rendering and structure:** Compare `render_mode` and structure preferences (e.g. prose vs list-friendly) systematically; use the existing `compare_structure_styles.py` and `compare_rendering_modes.py` as a base.
+10. **Optimizing Vehicle Routing with Graph-Based and Probabilistic Models**  
+    * **Summary:** Compares Dijkstra/A* baselines with BERT-based trip models, reinforcement learning policies, and graph neural networks to optimize travel time and EV energy use. Uses OSMnx data plus eVED/EV trip logs; predicts routes and per-trip energy, benchmarking against historical trips and shortest-path baselines.  
+    * **Link:** [Final Report](https://github.com/TheCrypted/STAT-4830-project-base/blob/main/docs/final_report.md)
 
-**Verifier and data**  
-- Stronger or better-calibrated classifier: more/better human–slop data, curriculum refinements, or alternate backbones. Validate the slop proxy against human preferences (e.g. chosen/rejected) where available.
-- T5 slop rewriter: improve rewriter quality or data mix so the classifier sees more diverse slop.
+11. **Learning to Bid: Deep CFR for Fantasy Hockey Auctions**  
+    * **Summary:** Applies Deep Counterfactual Regret Minimization to fantasy hockey auction drafts after iterating through AlphaZero and PPO prototypes. Uses a custom multi-player auction environment with budget/roster constraints and reports strong qualitative play against human opponents, especially in two-player settings.  
+    * **Link:** [Final Report](https://github.com/agrawalsparsh/STAT-4830-sparsh-project/blob/main/docs/report.pdf)
 
-**Generators and reward**  
-- Try other frozen generators (see `prompt_opt.yaml` comments: gpt2, Qwen2.5-0.5B, phi-2, SmolLM, etc.) and compare reward distributions with `compare_generators.py`.
-- Reward shaping: adjust structural, semantic, and quality weights so high reward better matches “good” text without reward hacking.
+## Spring 2026 Project Examples (Initial Reports)
 
-**Evaluation and deployment**  
-- Human eval or A/B tests on optimized vs seed prompts to confirm that higher reward corresponds to better perceived quality.
-- Scale to larger data or longer runs; monitor Colab memory and runtime.
+Current student projects:
 
-**Related work: GAN-style slop generator (peer)**  
-A parallel direction in this project is an **AI Slop GAN-style pipeline** (Colab, GPU): load **DefAn** (definitive-answer QA), create slop answers with a **mixture of older open-weights Hugging Face models** (tunable), train a **Discriminator** to classify real vs slop, and train a **Generator** with **Unsloth** (QLoRA, 4-bit) on real answers then **adversarially nudge** it to produce plausible-but-wrong answers. That setup is complementary to this repo’s “frozen generator + prompt optimization” flow: one optimizes prompts for a fixed LM; the other trains a generator to produce slop. Integration (e.g. shared discriminator/verifier, or slop data from the GAN pipeline) is left as a future step.
+1. **Playlist Ordering Optimization Under Skip Behavior**  
+   * **Summary:** Optimizes track ordering to reduce predicted skip events in music sessions using a two-stage pipeline: skip-probability modeling plus playlist reordering. Uses Spotify sequential skip data, frames reordering as a combinatorial optimization problem, and evaluates with offline ranking and calibration metrics.  
+   * **Link:** [Initial Report](https://github.com/divekpatel/STAT-4830-Vanishing-Gradients-project/blob/main/report.md)
+
+2. **Learning a Prompt-Level Slop Predictor**  
+   * **Summary:** Defines a response-quality "slop" score from repetition/diversity/entropy features, then trains a prompt-only regressor to predict that score from prompt text. Uses Anthropic HH-RLHF pairs for weak supervision and evaluates with MAE/RMSE/R^2 plus rank correlation.  
+   * **Link:** [Initial Report](https://github.com/braden-j/STAT-4830-PromptLab-project/blob/main/report.md)
+
+3. **Evolution Strategies for Sparse-Reward Reinforcement Learning**  
+   * **Summary:** Compares vanilla evolution strategies against PPO on obstacle-rich GridWorld tasks with sparse rewards. Initial runs reach high success under reward shaping, with clear plans to stress-test pure sparse settings, harder environments, and variance-reduction methods.  
+   * **Link:** [Initial Report](https://github.com/anirudhb123/STAT-4830-project-base/blob/main/report.md)
+
+4. **Differentiable Physics vs. Convex Relaxation for Battery Arbitrage**  
+   * **Summary:** Benchmarks a non-convex differentiable battery optimizer in PyTorch against a planned convex QP baseline for energy arbitrage under state-of-charge constraints. Early experiments on NYISO prices show profitable but oscillatory training with zero SoC violations, highlighting convergence/constraint trade-offs.  
+   * **Link:** [Initial Report](https://github.com/adamt38/STAT-4830-energy_arbitrage-project/blob/main/report.md)
+
+5. **Recursive Language Models with Python REPL Tool Use**  
+   * **Summary:** Implements an RLM-style loop where a model queries an external Python REPL to solve long-context retrieval tasks. The initial deterministic scaffold achieves perfect synthetic retrieval accuracy and sets up the next phase of LLM-generated actions and training for multi-step recursive editing.  
+   * **Link:** [Initial Report](https://github.com/aryanarora236/STAT-4830-RL-project/blob/main/report.md)
+
+6. **Optimizing Sheet Music Similarity Metrics**  
+   * **Summary:** Learns constrained weights over symbolic music features (key, time, pitch statistics, density) to classify whether score pages come from the same piece. Initial experiments on Bach chorales show above-baseline performance and motivate richer features, larger datasets, and improved optimization stability.  
+   * **Link:** [Initial Report](https://github.com/phillipduarte/STAT-4830-learning-music-project/blob/main/report.md)
+
+7. **Test-Time RL for Verifiable Optimization Search (AlphaGrad)**  
+   * **Summary:** Adapts AlphaEvolve-style proposal-and-verification loops by adding test-time RL/LoRA updates on strictly verifiable optimization tasks. Focuses on deterministic reward signals, valid proposal rates, and improvement trajectories on AC1 and circle-packing benchmarks.  
+   * **Link:** [Initial Report](https://github.com/jonrxu/STAT-4830-AlphaGrad-project/blob/main/report.md)
+
+8. **Portfolio Maximization with Constrained Mean-Variance Optimization (NAPPERS)**  
+   * **Summary:** Builds a leak-free monthly equity backtest that solves constrained mean-variance allocations with turnover penalties using differentiable PyTorch optimization. Initial results track equal-weight benchmarks closely, revealing stable implementation but weak signal strength and prompting stronger return/risk modeling next.  
+   * **Link:** [Initial Report](https://github.com/pald22/STAT-4830-NAPPERS-project/blob/main/report_md.pdf)
+
+9. **Online Portfolio Optimization: S&P 500 vs IPO 180-Day Index**  
+   * **Summary:** Optimizes daily long-only allocations between SPY and a custom IPO index via projected online gradient descent on a risk-adjusted objective with volatility, drawdown, and turnover penalties. Defines clear performance targets and identifies survivorship/look-ahead risks in financial data construction.  
+   * **Link:** [Initial Report](https://github.com/shivani9298/STAT-4830-OSO/blob/main/report.md)
+
+10. **MRI Reconstruction from Undersampled K-Space via Kernel Optimization**  
+    * **Summary:** Reconstructs MRI images by optimizing kernel coefficients in a Fourier-domain inverse problem rather than pixel space directly. Initial results on GBM MRI slices show promising PSNR/MSE and outline next steps on baselines, regularization, and scaling to larger datasets.  
+    * **Link:** [Initial Report](https://github.com/suzannasem/STAT-4830-project-base/blob/main/report.md)
+
+11. **Vision Transformer (ViT) Training Pipeline for CIFAR-10**  
+    * **Summary:** Builds a reproducible PyTorch ViT pipeline to minimize wall-clock time to a target 94% CIFAR-10 test accuracy while tracking throughput and GPU memory. Compares pretrained-vs-scratch setups, validates deterministic behavior, and establishes a benchmark foundation for augmentation and mixed-precision speedups.  
+    * **Link:** [Initial Report](https://github.com/mayankd101/STAT-4830-Mayank-Sai-Ayush-project/blob/exploration/report.md)
+
+12. **Differentiable Learning in Multi-Agent First-Price Auctions**  
+    * **Summary:** Studies whether simultaneously learning bidders converge to Nash equilibrium in first-price auctions by smoothing winner-take-all utilities and running gradient-based multi-agent optimization. Initial two-agent runs converge near the theoretical linear bidding equilibrium, with planned scaling to larger populations and equilibrium-gap diagnostics.  
+    * **Link:** [Initial Report](https://github.com/khaluong1229/marl-first-price-auctions/blob/main/report.md)
+
+13. **Autonomous Racing Policy Optimization in RacecarGym**  
+    * **Summary:** Frames autonomous racing as a sequential control problem with partial observations, continuous actions, and safety constraints, using RacecarGym as the training/evaluation environment. The initial report establishes environment structure, sensing/action assumptions, and a staged RL roadmap before expanding to richer rewards and multi-agent settings.  
+    * **Link:** [Initial Report](https://github.com/yuvimalik/Racing_Gym_RL/blob/main/STAT%204830%20First%20Report.pdf)
+
+14. **LogSumExp Continuation for Peak Autoconvolution Bounds (Sidon Autocorrelation)**  
+    * **Summary:** Optimizes upper bounds for an open mathematical constant by minimizing peak autoconvolution over the simplex using a two-phase method: LSE continuation plus Polyak subgradient polishing. Reports validated CPU-only implementation, strong scaling across discretization sizes, and near-state-of-the-art bounds with clear paths to higher-resolution and FFT-based acceleration.  
+    * **Link:** [Initial Report](https://github.com/AndreiPiterbarg/sidon-autocorrelation/blob/main/docs/report.md)
+
+15. **Adversarial Prompt Optimization Against GEPA-Aided Models**  
+    * **Summary:** Casts prompt injection and jailbreak-style attacks as a reinforcement learning optimization problem where an adversary rewrites prompts to induce bad outputs despite GEPA-generated system prompts. Uses REINFORCE-style training with toxicity-oriented evaluation and documents early-stage bottlenecks around model/metric selection and GEPA headroom.  
+    * **Link:** [Initial Report](https://github.com/05rentao/prompt-optimization/blob/main/report.md)
+
+16. **Zeroth-Order RL Optimization for LLM Prompt Policies (Wordle/Prime Intellect)**  
+    * **Summary:** Compares policy-gradient and evolutionary-strategy optimization in a black-box LLM RL setting where only scalar episode rewards are exposed. Uses prompt-module policies in Prime Intellect Wordle environments, implements a shared reward-extraction/evaluation pipeline, and reports initial feasibility with planned matched-budget PG-vs-ES comparisons.  
+    * **Link:** [Initial Report](https://github.com/sungycho/stat4830/blob/main/report.md)
+
+## Slop pipeline (classifier + prompt optimization)
+
+This repo also contains a **slop minimization pipeline**: a token-level classifier (verifier) trained on human vs slop text, plus prompt optimization over a frozen LLM using that classifier as the reward. For the full Colab-ready cell-by-cell guide, see [slop_docs/COLAB_CELLS.md](slop_docs/COLAB_CELLS.md). For a high-level and granular project overview, see the slop README in `slop_docs/` or the project root README in the slop-minimization fork.
+
+
