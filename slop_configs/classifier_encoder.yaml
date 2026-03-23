@@ -1,0 +1,50 @@
+# Token classifier (encoder backbone) config
+
+model:
+  backbone_name: "distilbert-base-uncased"
+  backbone_type: encoder
+  max_length: 256
+  num_labels: 2
+  dropout: 0.1
+  use_unsloth: false
+  use_lora: true
+  freeze_base: true
+  lora_r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  # Encoder (DistilBERT): q_lin, k_lin, v_lin. Causal (Llama/Mistral): q_proj, v_proj, k_proj, o_proj
+  lora_target_modules: ["q_lin", "k_lin", "v_lin"]
+
+training:
+  batch_size: 16
+  gradient_accumulation_steps: 2
+  learning_rate: 2e-5
+  num_epochs: 5
+  warmup_ratio: 0.1
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  early_stopping_patience: 3
+  fp16: true
+  use_wandb: false
+  run_name: null
+  output_dir: outputs/classifier
+  seed: 42
+  eval_steps: 100
+  save_steps: 500
+  logging_steps: 10
+
+data:
+  train_path: data/train.jsonl
+  val_path: data/val.jsonl
+  text_column: text
+  label_column: labels
+  max_samples: null
+  curriculum_enabled: true
+  difficulty_column: difficulty
+  curriculum_early_epoch_ratio: 0.5
+  curriculum_early_easy: 0.8
+  curriculum_early_medium: 0.2
+  curriculum_early_hard: 0.0
+  curriculum_late_easy: 0.2
+  curriculum_late_medium: 0.4
+  curriculum_late_hard: 0.4

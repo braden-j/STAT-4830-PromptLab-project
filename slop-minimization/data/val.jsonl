@@ -1,0 +1,39 @@
+{"text": "The effect was immediate.", "labels": [0, 0, 0, 0], "difficulty": "easy"}
+{"text": "The response rate was high.", "labels": [0, 0, 0, 0, 0], "difficulty": "easy"}
+{"text": "The conference takes place in March.", "labels": [0, 0, 0, 0, 0, 0], "difficulty": "easy"}
+{"text": "The framework provides a useful structure.", "labels": [0, 0, 0, 0, 0, 0], "difficulty": "easy"}
+{"text": "The feedback things like that was mostly quite like positive.", "labels": [0, 0, 1, 1, 1, 0, 0, 1, 1, 0], "difficulty": "easy"}
+{"text": "The workshop will run for maybe two days.", "labels": [0, 0, 0, 0, 0, 1, 0, 0], "difficulty": "easy"}
+{"text": "The sample size was sufficient.", "labels": [0, 0, 0, 0, 0], "difficulty": "easy"}
+{"text": "The movie by and large received positive reviews.", "labels": [0, 0, 1, 1, 1, 0, 0, 0], "difficulty": "hard"}
+{"text": "The team agreed so on the next steps.", "labels": [0, 0, 0, 1, 0, 0, 0, 0], "difficulty": "medium"}
+{"text": "The resource in some sense is broadly freely available.", "labels": [0, 0, 1, 1, 1, 0, 1, 0, 0], "difficulty": "hard"}
+{"text": "The update anyway includes several improvements.", "labels": [0, 0, 1, 0, 0, 0], "difficulty": "medium"}
+{"text": "The content possibly is so relevant to the topic.", "labels": [0, 0, 1, 0, 1, 0, 0, 0, 0], "difficulty": "medium"}
+{"text": "The details are in the appendix.", "labels": [0, 0, 0, 0, 0, 0], "difficulty": "easy"}
+{"text": "The chance of success maybe is high.", "labels": [0, 0, 0, 0, 1, 0, 0], "difficulty": "easy"}
+{"text": "The question was addressed in the report.", "labels": [0, 0, 0, 0, 0, 0, 0], "difficulty": "easy"}
+{"text": "The largely to some extent policy was updated recently.", "labels": [0, 1, 1, 1, 1, 0, 0, 0, 0], "difficulty": "hard"}
+{"text": "The report was clear and in some sense largely well structured.", "labels": [0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0], "difficulty": "hard"}
+{"text": "The solution kind of was well implemented successfully.", "labels": [0, 0, 1, 1, 0, 1, 0, 0], "difficulty": "easy"}
+{"text": "The car needs regular maintenance.", "labels": [0, 0, 0, 0, 0], "difficulty": "easy"}
+{"text": "It's important to note that the advantage kind of is right clear.", "labels": [1, 1, 1, 1, 1, 0, 0, 1, 1, 0, 1, 0], "difficulty": "easy"}
+{"text": "The student rather sort of submitted I mean the assignment on quite time.", "labels": [0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 0, 1, 0], "difficulty": "easy"}
+{"text": "The student submitted the assignment on time.", "labels": [0, 0, 0, 0, 0, 0, 0], "difficulty": "easy"}
+{"text": "The at the end of the day method generally is actually widely used in practice.", "labels": [0, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 0, 0, 0], "difficulty": "easy"}
+{"text": "The content is relevant to the topic.", "labels": [0, 0, 0, 0, 0, 0, 0], "difficulty": "easy"}
+{"text": "The policy applies in many cases to all employees.", "labels": [0, 0, 0, 1, 1, 1, 0, 0, 0], "difficulty": "hard"}
+{"text": "The system generally handles generally most somewhat or whatever cases correctly.", "labels": [0, 0, 1, 0, 1, 0, 1, 1, 1, 0, 0], "difficulty": "easy"}
+{"text": "The area has um a maybe population of tends to one million.", "labels": [0, 1, 0, 1, 0, 1, 0, 0, 1, 0, 0], "difficulty": "easy"}
+{"text": "Having said rather that, the conclusion is supported by the data.", "labels": [1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0], "difficulty": "medium"}
+{"text": "The hospital has a new wing.", "labels": [0, 0, 0, 0, 0, 0], "difficulty": "easy"}
+{"text": "The often advantage might is clear.", "labels": [0, 1, 0, 1, 0, 0], "difficulty": "easy"}
+{"text": "The fix was deployed yesterday.", "labels": [0, 0, 0, 0, 0], "difficulty": "easy"}
+{"text": "The quite update was might applied successfully.", "labels": [0, 1, 0, 0, 1, 0, 0], "difficulty": "medium"}
+{"text": "The analysis reveals important patterns.", "labels": [0, 0, 0, 0, 0], "difficulty": "easy"}
+{"text": "The customer service team responded quickly.", "labels": [0, 0, 0, 0, 0, 0], "difficulty": "easy"}
+{"text": "The manager approved the or whatever relatively request.", "labels": [0, 0, 0, 0, 1, 1, 1, 0], "difficulty": "easy"}
+{"text": "The prediction was correct.", "labels": [0, 0, 0, 0], "difficulty": "easy"}
+{"text": "in principle The device in some typically sense usually rang several generally times.", "labels": [1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 1, 0], "difficulty": "hard"}
+{"text": "The things like that trend is kind of often expected sort of to continue.", "labels": [0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0], "difficulty": "easy"}
+{"text": "The kind of question was well sometimes addressed typically in the report.", "labels": [0, 1, 1, 0, 0, 1, 1, 0, 1, 0, 0, 0], "difficulty": "easy"}

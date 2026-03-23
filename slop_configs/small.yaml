@@ -1,0 +1,18 @@
+# Small model config for faster iteration
+
+model:
+  backbone_name: "gpt2"
+  max_length: 256
+  num_labels: 2
+  dropout: 0.1
+  use_unsloth: false
+  lora_r: 8
+  lora_alpha: 16
+  lora_target_modules: ["c_attn"]
+
+training:
+  batch_size: 16
+  gradient_accumulation_steps: 2
+  learning_rate: 5e-5
+  num_epochs: 2
+  output_dir: outputs/small

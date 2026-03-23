@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "slop-minimization"
+version = "0.1.0"
+description = "Token-level slop classifier and generator for minimizing AI slop"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "Slop Minimization Team" }]
+dependencies = [
+    "torch>=2.0.0",
+    "transformers>=4.36.0",
+    "peft>=0.7.0",
+    "datasets>=2.14.0",
+    "accelerate>=0.25.0",
+    "tqdm>=4.65.0",
+    "pyyaml>=6.0",
+    "einops>=0.7.0",
+    "scikit-learn>=1.0.0",
+]
+
+[project.optional-dependencies]
+unsloth = ["unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"]
+wandb = ["wandb>=0.16.0"]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+]
+
+[tool.poetry]
+# Compatible with poetry as well
+package-mode = false
+
+[tool.hatch.build.targets.wheel]
+packages = ["slop_src/slop"]
+
+[tool.pytest.ini_options]
+testpaths = ["slop_tests"]
+pythonpath = ["slop_src"]
+addopts = "-v --tb=short"

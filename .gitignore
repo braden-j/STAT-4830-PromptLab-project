@@ -1,3 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Virtual envs
+.venv/
+venv/
+.python-version
+
+# Data & outputs
+data/raw/
+data/*.jsonl
+outputs/
+*.bin
+*.safetensors
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Logs
+wandb/
+*.log
+
 # Ignore everything in figures directory except PNGs and TEX files
 docs/figures/*
 !docs/figures/*.png

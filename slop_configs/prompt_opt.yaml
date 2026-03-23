@@ -1,0 +1,69 @@
+# Prompt optimization (A8): hill climbing to minimize slop
+
+# Reward model (A7) - curriculum checkpoint by default
+reward:
+  checkpoint_path: outputs/classifier_curriculum
+  config_path: slop_configs/classifier_encoder.yaml
+  aggregation_mode: mean
+  device: null
+  batch_size: 16
+
+# Generator (frozen causal LM). Swap model_name to use a different model; all presets work with this block.
+# In this project's generator comparison, TinyLlama outperformed gpt2 and Qwen2.5-0.5B-Instruct on reward scores.
+# Recommended presets (override with --generator-model):
+#   - TinyLlama/TinyLlama-1.1B-Chat-v1.0: default; small instruct, better on-task; ~1.1B params.
+#   - gpt2: baseline, fastest, weakest instruction-following (Colab-safe).
+#   - Qwen/Qwen2.5-0.5B-Instruct: 0.5B instruct; strong for size, Colab-friendly.
+#   - microsoft/phi-2: stronger 2.7B instruct; best quality, needs more Colab RAM/GPU.
+#   - HuggingFaceTB/SmolLM2-360M-Instruct: tiny instruct fallback.
+generator:
+  model_name: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+  temperature: 0.8
+  top_p: 0.95
+  max_new_tokens: 256
+  do_sample: true
+  device: null
+  batch_size: 4
+  repetition_penalty: 1.1
+  no_repeat_ngram_size: 3
+  eos_token_id: null
+  max_prompt_length: 1024
+
+# Search (slightly more stable run: larger population, more iterations)
+# Seeds use structure_preference: prose_preferred by default.
+search:
+  population_size: 8
+  top_k: 3
+  children_per_parent: 2
+  num_iterations: 4
+  samples_per_prompt: 2
+  mutation_strength: medium
+  random_seed: 42
+  min_output_length: 20
+  keep_random_explore: 1
+  render_mode: simple
+  lambda_structural: 0.15
+  structural_threshold: 0.25
+  preserve_one_unmutated_best: true
+  # Semantic penalty: meta-instructional, writing-advice, off-task (default task_keywords derived from default_task)
+  lambda_semantic: 0.12
+  task_keywords: []  # e.g. [inflation, prices, economy]; empty => derive from task instruction
+  # Quality reward: modest positive signal for useful outputs (kept small to avoid dominating reward)
+  lambda_quality: 0.10
+  quality_weights:
+    information_density: 0.4
+    clarity: 0.3
+    completeness: 0.3
+  # Semantic PromptSpec mutation frequency (higher-level, meaning-changing edits)
+  semantic_mutation_probability: 0.25
+  # Exploration: inject diversity to avoid local optima (modest by default)
+  exploration_rate: 0.15
+  exploration_epsilon: 0.10
+  num_random_immigrants: null
+  # Speed: in-memory evaluation cache within a run
+  enable_eval_cache: true
+
+# Task / topic (default seed instruction)
+default_task: "Explain inflation clearly to a college student."
+
+output_dir: outputs/prompt_opt
