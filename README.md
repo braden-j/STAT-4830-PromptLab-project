@@ -301,11 +301,7 @@ Current student projects:
     * **Summary:** Compares policy-gradient and evolutionary-strategy optimization in a black-box LLM RL setting where only scalar episode rewards are exposed. Uses prompt-module policies in Prime Intellect Wordle environments, implements a shared reward-extraction/evaluation pipeline, and reports initial feasibility with planned matched-budget PG-vs-ES comparisons.  
     * **Link:** [Initial Report](https://github.com/sungycho/stat4830/blob/main/report.md)
 
-## Slop pipeline (classifier + prompt optimization)
 
-This repo also contains a **slop minimization pipeline**: a token-level classifier (verifier) trained on human vs slop text, plus prompt optimization over a frozen LLM using that classifier as the reward.
 
-- **Run in Colab:** [slop_docs/COLAB_CELLS.md](slop_docs/COLAB_CELLS.md) — cell-by-cell guide.
-- **Current phase (overview, layout, next steps):** [slop_docs/CURRENT_PHASE.md](slop_docs/CURRENT_PHASE.md).
 
 
