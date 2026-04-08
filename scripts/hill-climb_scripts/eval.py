@@ -9,17 +9,17 @@ from pathlib import Path
 import torch
 
 import sys
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "slop_src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from slop.dataset_io import load_jsonl
-from slop.tokenizer_utils import SlopTokenizer
-from slop.scoring import compute_reward, aggregate_token_scores
+from hill_climb.dataset_io import load_jsonl
+from hill_climb.tokenizer_utils import SlopTokenizer
+from hill_climb.scoring import compute_reward, aggregate_token_scores
 
 
 def _load_classifier_from_saved_config(classifier_path: Path, device: torch.device):
     """Load encoder classifier (with optional PEFT) using model_config.json + pytorch_model.bin."""
-    from slop.config import ModelConfig
-    from slop.models import create_classifier_and_tokenizer
+    from hill_climb.config import ModelConfig
+    from hill_climb.models import create_classifier_and_tokenizer
     from transformers import AutoTokenizer
 
     config_path = classifier_path / "model_config.json"
@@ -91,7 +91,7 @@ def main() -> None:
         model, tokenizer = _load_classifier_from_saved_config(classifier_path, device)
         if model is None or tokenizer is None:
             # Fallback: load as causal LM from path (requires config.json with model_type in checkpoint)
-            from slop.models.token_classifier import SlopTokenClassifier
+            from hill_climb.models.token_classifier import SlopTokenClassifier
             tokenizer = AutoTokenizer.from_pretrained(classifier_path)
             model = SlopTokenClassifier(
                 backbone_name=str(classifier_path),

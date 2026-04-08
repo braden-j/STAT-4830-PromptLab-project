@@ -45,9 +45,9 @@ dev-dependencies = [
 package-mode = false
 
 [tool.hatch.build.targets.wheel]
-packages = ["slop_src/slop"]
+packages = ["src/hill_climb"]
 
 [tool.pytest.ini_options]
-testpaths = ["slop_tests"]
-pythonpath = ["slop_src"]
+testpaths = ["tests/hill-climb-tests"]
+pythonpath = ["src"]
 addopts = "-v --tb=short"

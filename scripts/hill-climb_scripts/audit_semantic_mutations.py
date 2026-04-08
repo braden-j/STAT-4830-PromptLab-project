@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate concrete parent -> child examples for each semantic mutation helper.
 No model or network required. Run from repo root:
-  PYTHONPATH=<repo>/slop_src python slop_scripts/audit_semantic_mutations.py
+  PYTHONPATH=<repo>/src python scripts/hill-climb_scripts/audit_semantic_mutations.py
 """
 from __future__ import annotations
 
@@ -9,10 +9,10 @@ import sys
 import json
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "slop_src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from slop.prompt_opt.templates import PromptSpec, get_seeds_for_task, prompt_spec_to_dict
-from slop.prompt_opt.mutations import (
+from hill_climb.prompt_opt.templates import PromptSpec, get_seeds_for_task, prompt_spec_to_dict
+from hill_climb.prompt_opt.mutations import (
     mutate_constraints_semantically,
     mutate_anti_slop_semantically,
     mutate_output_format_semantically,

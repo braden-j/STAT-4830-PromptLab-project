@@ -5,9 +5,9 @@ import torch
 
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "slop_src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from slop.scoring import compute_reward, aggregate_token_scores
+from hill_climb.scoring import compute_reward, aggregate_token_scores
 
 
 def test_aggregate_token_scores_mean():
@@ -72,8 +72,8 @@ def test_aggregate_token_scores_topk():
 
 def test_reward_aggregation_and_penalties():
     """Reward = -(doc_slop_score + penalties); diagnostics exposed."""
-    from slop.scoring.diagnostics import compute_diagnostics, repetition_ratio
-    from slop.scoring.reward import length_penalty_single, generic_phrase_ratio_single
+    from hill_climb.scoring.diagnostics import compute_diagnostics, repetition_ratio
+    from hill_climb.scoring.reward import length_penalty_single, generic_phrase_ratio_single
 
     d = compute_diagnostics("Short.", token_count=1)
     assert d["very_short"] is True

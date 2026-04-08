@@ -3,9 +3,9 @@
 import pytest
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "slop_src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from slop.tokenizer_utils import tokenize_and_align_labels, SlopTokenizer
+from hill_climb.tokenizer_utils import tokenize_and_align_labels, SlopTokenizer
 from conftest import get_tokenizer
 
 

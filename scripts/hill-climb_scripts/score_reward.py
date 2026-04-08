@@ -8,9 +8,9 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "slop_src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from slop.scoring import SlopRewardModel, RewardConfig
+from hill_climb.scoring import SlopRewardModel, RewardConfig
 
 
 def parse_args() -> argparse.Namespace:

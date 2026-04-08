@@ -14,10 +14,10 @@ import random
 from pathlib import Path
 
 import sys
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "slop_src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from slop.dataset_io import load_jsonl
-from slop.slop_gen import RuleSloppifier
+from hill_climb.dataset_io import load_jsonl
+from hill_climb.slop_gen import RuleSloppifier
 
 
 # Built-in corpus of clean sentences to scale without external data

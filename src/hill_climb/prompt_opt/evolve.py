@@ -9,7 +9,7 @@ from typing import Any, Callable
 
 from .templates import PromptSpec, render_prompt, get_seeds_for_task, prompt_spec_to_dict, dict_to_prompt_spec, RENDER_MODES
 from .mutations import mutate_spec
-from slop.scoring.diagnostics import compute_semantic_diagnostics, compute_quality_diagnostics
+from hill_climb.scoring.diagnostics import compute_semantic_diagnostics, compute_quality_diagnostics
 
 
 def _task_keywords_from_instruction(task_instruction: str, max_words: int = 10) -> list[str]:

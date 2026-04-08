@@ -3,7 +3,7 @@
 
 reward:
   checkpoint_path: outputs/classifier
-  config_path: slop_configs/classifier_encoder.yaml
+  config_path: configs/hill-climb_configs/classifier_encoder.yaml
   aggregation_mode: mean   # mean | max | topk
   topk_fraction: 0.1
   chunk_size: 256

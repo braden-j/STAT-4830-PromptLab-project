@@ -3,7 +3,7 @@
 # Reward model (A7) - curriculum checkpoint by default
 reward:
   checkpoint_path: outputs/classifier_curriculum
-  config_path: slop_configs/classifier_encoder.yaml
+  config_path: configs/hill-climb_configs/classifier_encoder.yaml
   aggregation_mode: mean
   device: null
   batch_size: 16

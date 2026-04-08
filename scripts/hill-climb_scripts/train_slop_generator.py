@@ -8,11 +8,11 @@ import json
 from pathlib import Path
 
 import sys
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "slop_src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from slop.dataset_io import load_jsonl
-from slop.slop_gen import RuleSloppifier
-from slop.slop_gen.train_rewriter import train_rewriter
+from hill_climb.dataset_io import load_jsonl
+from hill_climb.slop_gen import RuleSloppifier
+from hill_climb.slop_gen.train_rewriter import train_rewriter
 
 
 def load_good_text(paths: list[str], text_key: str = "text", label_key: str = "labels", min_len: int = 20) -> list[str]:

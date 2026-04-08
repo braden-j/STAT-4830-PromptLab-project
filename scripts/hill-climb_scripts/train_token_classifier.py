@@ -15,13 +15,13 @@ from torch.utils.data import DataLoader, WeightedRandomSampler
 from datasets import Dataset
 
 import sys
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "slop_src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
-from slop.config import Config
-from slop.dataset_io import load_jsonl
-from slop.tokenizer_utils import tokenize_and_align_labels
-from slop.models import create_classifier_and_tokenizer
-from slop.metrics import (
+from hill_climb.config import Config
+from hill_climb.dataset_io import load_jsonl
+from hill_climb.tokenizer_utils import tokenize_and_align_labels
+from hill_climb.models import create_classifier_and_tokenizer
+from hill_climb.metrics import (
     token_level_f1,
     token_level_auroc,
     doc_level_auroc,
@@ -31,7 +31,7 @@ from slop.metrics import (
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Train token-level slop classifier from YAML config")
-    p.add_argument("--config", type=str, default="slop_configs/classifier_encoder.yaml")
+    p.add_argument("--config", type=str, default="configs/hill-climb_configs/classifier_encoder.yaml")
     p.add_argument("--output-dir", type=str, default=None, help="Override config output_dir")
     p.add_argument("--use-wandb", action="store_true", help="Override to enable wandb")
     return p.parse_args()

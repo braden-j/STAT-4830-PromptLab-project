@@ -1,4 +1,7 @@
-"""Token-level labeling for slop detection from (human_text, slop_text) pairs."""
+"""Token-level labeling for slop detection from (human_text, slop_text) pairs.
+
+Part of src/hill_climb/data/; used by tests and optional pipelines.
+"""
 
 from __future__ import annotations
 
@@ -58,7 +61,6 @@ def detect_sloppy_spans(
             while j < len(words) and words[j].lower() == w.lower():
                 j += 1
             if j > i + 1:
-                # Found run of repeated words; get char span (start inclusive, end exclusive)
                 start_char = len(" ".join(words[:i]))
                 end_char = len(" ".join(words[:j]))
                 end_char = min(end_char, len(text))
@@ -183,7 +185,6 @@ def build_token_label_examples(
         if not human_text.strip() and not slop_text.strip():
             continue
 
-        # Option 1: document-level
         if label_mode == "document":
             for text, label_val in [(human_text, 0), (slop_text, 1)]:
                 if not text.strip():
@@ -199,29 +200,29 @@ def build_token_label_examples(
                 results.extend(chunks)
             continue
 
-        # Option 2: span_heuristic (only slop_text; human_text still all 0)
-        if human_text.strip():
-            ids_h, offsets_h, special_h = _tokenize_with_offsets(tokenizer, human_text)
-            token_labels_h = [
-                label_pad_token_id if special_h[i] else 0
-                for i in range(len(ids_h))
-            ]
-            chunks_h = _chunk_sequence(ids_h, token_labels_h, tokenizer, max_length, stride, label_pad_token_id)
-            results.extend(chunks_h)
+        if label_mode == "span_heuristic":
+            if human_text.strip():
+                ids_h, offsets_h, special_h = _tokenize_with_offsets(tokenizer, human_text)
+                token_labels_h = [
+                    label_pad_token_id if special_h[i] else 0
+                    for i in range(len(ids_h))
+                ]
+                chunks_h = _chunk_sequence(ids_h, token_labels_h, tokenizer, max_length, stride, label_pad_token_id)
+                results.extend(chunks_h)
 
-        if not slop_text.strip():
-            continue
-        spans = detect_sloppy_spans(
-            slop_text,
-            phrase_list=phrase_list,
-            use_repetition=use_repetition,
-            use_distinct2=use_distinct2,
-            distinct2_window=distinct2_window,
-            distinct2_threshold=distinct2_threshold,
-        )
-        ids_s, offsets_s, special_s = _tokenize_with_offsets(tokenizer, slop_text)
-        token_labels_s = spans_to_token_labels(offsets_s, special_s, spans, label_pad_token_id)
-        chunks_s = _chunk_sequence(ids_s, token_labels_s, tokenizer, max_length, stride, label_pad_token_id)
-        results.extend(chunks_s)
+            if not slop_text.strip():
+                continue
+            spans = detect_sloppy_spans(
+                slop_text,
+                phrase_list=phrase_list,
+                use_repetition=use_repetition,
+                use_distinct2=use_distinct2,
+                distinct2_window=distinct2_window,
+                distinct2_threshold=distinct2_threshold,
+            )
+            ids_s, offsets_s, special_s = _tokenize_with_offsets(tokenizer, slop_text)
+            token_labels_s = spans_to_token_labels(offsets_s, special_s, spans, label_pad_token_id)
+            chunks_s = _chunk_sequence(ids_s, token_labels_s, tokenizer, max_length, stride, label_pad_token_id)
+            results.extend(chunks_s)
 
     return results

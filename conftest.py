@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 # Add src to path for imports
-sys.path.insert(0, str(Path(__file__).resolve().parent / "slop_src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
 
 def _make_offline_tokenizer():

@@ -64,15 +64,15 @@ End-to-end: **Data → Train verifier \( R \) → (Optional: T5 slop rewriter) �
 
 ### Repository layout (main pieces)
 
-- **`slop_src/slop/`** — Python package: models, data loading, tokenization, scoring, prompt optimization.
-- **`slop_scripts/`** — CLI entry points: build data, train classifier, train T5, run prompt optimization, eval, comparisons.
-- **`slop_configs/`** — YAML configs for classifier, prompt optimization, reward, and small/default runs.
-- **`slop_docs/`** — Docs; **`COLAB_CELLS.md`** is the canonical “run in Colab” cell-by-cell guide.
-- **`slop_tests/`** — Tests for tokenization, scoring, etc.
+- **`src/hill_climb/`** — Python package: models, data loading, tokenization, scoring, prompt optimization.
+- **`scripts/hill-climb_scripts/`** — CLI entry points: build data, train classifier, train T5, run prompt optimization, eval, comparisons.
+- **`configs/hill-climb_configs/`** — YAML configs for classifier, prompt optimization, reward, and small/default runs.
+- **`docs/hill-climb_docs/`** — Docs; **`COLAB_CELLS.md`** is the canonical “run in Colab” cell-by-cell guide.
+- **`tests/hill-climb-tests/`** — Tests for tokenization, scoring, etc.
 - **`data/`** — Built datasets (train/val/test JSONL); produced by `build_data.py` (inputs live under `data/raw/` if you use your own good/slop files).
 - **`outputs/`** — All trained artifacts (classifier, T5 rewriter, prompt-opt runs). Gitignored; persist via zip or Google Drive.
 
-There is also a **`slop-minimization/`** subfolder with its own structure (notebooks, different scripts); the **canonical pipeline** described here is **`slop_src` + `slop_scripts` + `slop_configs`**, as in **`slop_docs/COLAB_CELLS.md`**.
+The **canonical pipeline** described here is **`src/hill_climb` + `scripts/hill-climb_scripts/` + `configs/hill-climb_configs/`**, as in **`COLAB_CELLS.md`**.
 
 ---
 
@@ -80,13 +80,13 @@ There is also a **`slop-minimization/`** subfolder with its own structure (noteb
 
 | Path | Role |
 |------|------|
-| `slop_src/slop/` | Core library: classifier models, data, tokenizer utils, scoring (reward), prompt_opt (templates, mutations, generator, hill climbing). |
-| `slop_src/slop/models/` | `token_classifier.py` (EncoderSlopClassifier, SlopTokenClassifier), `classifier_factory.py` (create_classifier_and_tokenizer), `slop_generator.py` (T5 rewriter). |
-| `slop_src/slop/scoring/` | Reward model wrapper (`reward.py`), aggregation, diagnostics. |
-| `slop_src/slop/prompt_opt/` | PromptSpec, render modes, mutations, `FrozenGenerator`, `run_hill_climbing`, `compare_seed_vs_optimized`. |
-| `slop_src/slop/data/` | Dataset and token-label utilities. |
-| `slop_scripts/` | All runnable scripts; see table below. |
-| `slop_configs/` | `classifier_encoder.yaml`, `prompt_opt.yaml`, `reward.yaml`, etc. |
+| `src/hill_climb/` | Core library: classifier models, data, tokenizer utils, scoring (reward), prompt_opt (templates, mutations, generator, hill climbing). |
+| `src/hill_climb/models/` | `token_classifier.py` (EncoderSlopClassifier, SlopTokenClassifier), `classifier_factory.py` (create_classifier_and_tokenizer), `slop_generator.py` (T5 rewriter). |
+| `src/hill_climb/scoring/` | Reward model wrapper (`reward.py`), aggregation, diagnostics. |
+| `src/hill_climb/prompt_opt/` | PromptSpec, render modes, mutations, `FrozenGenerator`, `run_hill_climbing`, `compare_seed_vs_optimized`. |
+| `src/hill_climb/data/` | Dataset and token-label utilities. |
+| `scripts/hill-climb_scripts/` | All runnable scripts; see table below. |
+| `configs/hill-climb_configs/` | `classifier_encoder.yaml`, `prompt_opt.yaml`, `reward.yaml`, etc. |
 | `data/` | `train.jsonl`, `val.jsonl`, `test.jsonl` (and optionally `slop_pairs.jsonl` for T5). |
 | `outputs/` | `classifier_curriculum/`, `slop_rewriter/`, `prompt_opt/`, `eval_results.json`. |
 
@@ -97,9 +97,9 @@ There is also a **`slop-minimization/`** subfolder with its own structure (noteb
 | Script | Purpose |
 |--------|--------|
 | `build_data.py` | Build train/val/test JSONL from good/slop text (or placeholders). Writes to `data/`. |
-| `train_token_classifier.py` | Train the verifier (encoder + LoRA). Reads `slop_configs/classifier_encoder.yaml`; writes `outputs/classifier_curriculum` (or path you set). Saves `pytorch_model.bin`, tokenizer, and `model_config.json`. |
+| `train_token_classifier.py` | Train the verifier (encoder + LoRA). Reads `configs/hill-climb_configs/classifier_encoder.yaml`; writes `outputs/classifier_curriculum` (or path you set). Saves `pytorch_model.bin`, tokenizer, and `model_config.json`. |
 | `train_slop_generator.py` | Generate slop pairs and/or train T5 rewriter. Writes `data/slop_pairs.jsonl`, `outputs/slop_rewriter`. |
-| `optimize_prompts.py` | Hill-climb prompts using frozen generator + reward model. Reads `slop_configs/prompt_opt.yaml`; writes to `outputs/prompt_opt/`. |
+| `optimize_prompts.py` | Hill-climb prompts using frozen generator + reward model. Reads `configs/hill-climb_configs/prompt_opt.yaml`; writes to `outputs/prompt_opt/`. |
 | `eval.py` | Evaluate classifier on test set (mean reward, sequence accuracy). Writes `outputs/eval_results.json`. Loads classifier via `model_config.json` (or backward-compat default). |
 | `eval_reward_model.py` | Score a JSONL with the reward model; report mean/std and optional top/bottom examples. |
 | `score_reward.py` | CLI: score raw text or a file with the reward model. |
@@ -108,15 +108,15 @@ There is also a **`slop-minimization/`** subfolder with its own structure (noteb
 | `compare_*.py` | Compare generators, structure styles, rendering modes, or reward checkpoints. |
 | `validate_dataset.py`, `build_classifier_dataset.py` | Data validation and alternate dataset building. |
 
-All scripts assume you run from repo root with `PYTHONPATH` including the repo’s `slop_src` (e.g. `PYTHONPATH=$PWD/slop_src python slop_scripts/script_name.py ...`).
+All scripts assume you run from repo root with `PYTHONPATH` including the repo’s `src` directory (e.g. `PYTHONPATH=$PWD/src python scripts/hill-climb_scripts/script_name.py ...`).
 
 ---
 
 ### Configs (what to tweak)
 
-- **`slop_configs/classifier_encoder.yaml`** — Backbone (e.g. DistilBERT), LoRA, max_length, training (batch size, epochs, early stopping), data paths, curriculum. Override output with `--output-dir`.
-- **`slop_configs/prompt_opt.yaml`** — Reward checkpoint and aggregation; generator model (e.g. TinyLlama), temperature, max_new_tokens; search (population_size, num_iterations, mutation, structural/semantic/quality weights); default_task and output_dir. Used by `optimize_prompts.py`.
-- **`slop_configs/reward.yaml`** — Reward-model-only options if you run scoring scripts with a shared config.
+- **`configs/hill-climb_configs/classifier_encoder.yaml`** — Backbone (e.g. DistilBERT), LoRA, max_length, training (batch size, epochs, early stopping), data paths, curriculum. Override output with `--output-dir`.
+- **`configs/hill-climb_configs/prompt_opt.yaml`** — Reward checkpoint and aggregation; generator model (e.g. TinyLlama), temperature, max_new_tokens; search (population_size, num_iterations, mutation, structural/semantic/quality weights); default_task and output_dir. Used by `optimize_prompts.py`.
+- **`configs/hill-climb_configs/reward.yaml`** — Reward-model-only options if you run scoring scripts with a shared config.
 
 ---
 
@@ -130,8 +130,8 @@ All scripts assume you run from repo root with `PYTHONPATH` including the repo�
 
 ### How to run: Colab vs local
 
-- **Colab (recommended for full pipeline):** Follow **`slop_docs/COLAB_CELLS.md`** step by step. Clone repo, set `PROJECT_ROOT`, install deps, then run cells in order: GPU check → clone/setup → install → layout → build data → train classifier → generate slop pairs → train T5 → prompt optimization → “Show progress” cells (eval, reward-model stats, prompt-opt summary) → zip (and optionally Drive). Each cell has a short comment at the top describing what it does.
-- **Local:** Same order, but run the commands from the cells in your shell (using `cd $PROJECT_ROOT && PYTHONPATH=$PROJECT_ROOT/slop_src python slop_scripts/...`). Ensure `data/` exists (run `build_data.py` or drop in your own train/val/test JSONL).
+- **Colab (recommended for full pipeline):** Follow **`COLAB_CELLS.md`** step by step. Clone repo, set `PROJECT_ROOT`, install deps, then run cells in order: GPU check → clone/setup → install → layout → build data → train classifier → generate slop pairs → train T5 → prompt optimization → “Show progress” cells (eval, reward-model stats, prompt-opt summary) → zip (and optionally Drive). Each cell has a short comment at the top describing what it does.
+- **Local:** Same order, but run the commands from the cells in your shell (using `cd $PROJECT_ROOT && PYTHONPATH=$PROJECT_ROOT/src python scripts/hill-climb_scripts/...`). Ensure `data/` exists (run `build_data.py` or drop in your own train/val/test JSONL).
 - **Quick validation after code changes:** Clone (or pull), install deps, restore artifacts from a previous run (e.g. unzip `slop_critical_artifacts.zip` into `outputs/` or copy from Drive). Then run only the “Show progress” and eval cells so you don’t retrain everything.
 
 ---
@@ -154,7 +154,7 @@ All scripts assume you run from repo root with `PYTHONPATH` including the repo�
 Planned or natural extensions of the current pipeline:
 
 **Search and prompt optimization (more parameters)**  
-- **Hill-climbing:** Larger population, more iterations, and more samples per prompt; tune mutation strength, exploration rate, and top-k selection. Config knobs live in `slop_configs/prompt_opt.yaml` under `search`.
+- **Hill-climbing:** Larger population, more iterations, and more samples per prompt; tune mutation strength, exploration rate, and top-k selection. Config knobs live in `configs/hill-climb_configs/prompt_opt.yaml` under `search`.
 - **Prompt mutations:** Richer mutation operators (structural, semantic, length, format) and higher semantic-mutation probability to escape local optima. The codebase already supports structural vs semantic penalties and quality-reward terms; these can be expanded or reweighted.
 - **Rendering and structure:** Compare `render_mode` and structure preferences (e.g. prose vs list-friendly) systematically; use the existing `compare_structure_styles.py` and `compare_rendering_modes.py` as a base.
 

@@ -8,17 +8,17 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "slop_src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 import yaml
-from slop.scoring import SlopRewardModel, RewardConfig
-from slop.prompt_opt import FrozenGenerator, GeneratorConfig, compare_seed_vs_optimized
+from hill_climb.scoring import SlopRewardModel, RewardConfig
+from hill_climb.prompt_opt import FrozenGenerator, GeneratorConfig, compare_seed_vs_optimized
 
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Compare seed vs optimized prompts on same task")
     p.add_argument("--run-dir", type=str, required=True, help="Run directory (e.g. outputs/prompt_opt/run_20250101_120000)")
-    p.add_argument("--config", type=str, default="slop_configs/prompt_opt.yaml", help="Config for reward/generator if not in run dir")
+    p.add_argument("--config", type=str, default="configs/hill-climb_configs/prompt_opt.yaml", help="Config for reward/generator if not in run dir")
     p.add_argument("--n-samples", type=int, default=5)
     return p.parse_args()
 
@@ -41,8 +41,8 @@ def main() -> None:
     reward_cfg = cfg.get("reward", {})
     gen_cfg = cfg.get("generator", {})
     if not reward_cfg:
-        root = Path(__file__).resolve().parent.parent
-        with open(root / "slop_configs" / "prompt_opt.yaml") as f:
+        root = Path(__file__).resolve().parent.parent.parent
+        with open(root / "configs" / "hill-climb_configs" / "prompt_opt.yaml") as f:
             full = yaml.safe_load(f) or {}
             reward_cfg = full.get("reward", {})
             gen_cfg = full.get("generator", {})

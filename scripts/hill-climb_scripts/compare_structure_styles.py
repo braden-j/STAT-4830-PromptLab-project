@@ -8,11 +8,11 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "slop_src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "src"))
 
 import yaml
-from slop.scoring import SlopRewardModel, RewardConfig
-from slop.prompt_opt import (
+from hill_climb.scoring import SlopRewardModel, RewardConfig
+from hill_climb.prompt_opt import (
     FrozenGenerator,
     GeneratorConfig,
     get_seeds_for_task,
@@ -25,7 +25,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="Compare prose_preferred / mixed / list_friendly structure styles (same task, seeds, generator, reward)"
     )
-    p.add_argument("--config", type=str, default="slop_configs/prompt_opt.yaml", help="YAML config path")
+    p.add_argument("--config", type=str, default="configs/hill-climb_configs/prompt_opt.yaml", help="YAML config path")
     p.add_argument("--task", type=str, default=None, help="Task instruction (overrides config)")
     p.add_argument("--n-samples", type=int, default=3, help="Samples per seed per style")
     p.add_argument("--seed", type=int, default=42)

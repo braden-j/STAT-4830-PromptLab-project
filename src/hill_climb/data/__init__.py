@@ -1,6 +1,9 @@
-"""Data loading and tokenization for slop minimization."""
+"""Data loading and tokenization for slop minimization.
 
-from .dataset import SlopDataset
+Lives in src/hill_climb/data/ so Colab can use it after clone (no %%writefile needed).
+"""
+
+from .dataset import load_jsonl, SlopDataset
 from .tokenizer import tokenize_and_align_labels, SlopTokenizer
 from .token_labels import (
     build_token_label_examples,
@@ -10,6 +13,7 @@ from .token_labels import (
 )
 
 __all__ = [
+    "load_jsonl",
     "SlopDataset",
     "tokenize_and_align_labels",
     "SlopTokenizer",

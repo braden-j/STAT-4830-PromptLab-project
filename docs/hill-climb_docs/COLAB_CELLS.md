@@ -1,6 +1,6 @@
 # Colab cells: essential pipeline (functional, bug-free)
 
-Clone the repo, set `PYTHONPATH` to `slop_src`, and run these cells in order. No `%%writefile` or patch cells needed. Repo layout: `slop_configs/`, `slop_scripts/`, `slop_src/slop/`.
+Clone the repo, set `PYTHONPATH` to `src`, and run these cells in order. No `%%writefile` or patch cells needed. Repo layout: `configs/hill-climb_configs/`, `scripts/hill-climb_scripts/`, `src/hill_climb/`.
 
 ---
 
@@ -48,9 +48,9 @@ print("Project root:", PROJECT_ROOT)
 ## Cell 4 — Verify layout
 
 ```python
-# Confirm cwd is repo root and slop_configs, slop_scripts, slop_src exist.
+# Confirm cwd is repo root and configs, scripts, src/hill_climb exist.
 !pwd
-!ls slop_configs slop_scripts slop_src
+!ls configs/hill-climb_configs scripts/hill-climb_scripts src/hill_climb
 ```
 
 ---
@@ -59,7 +59,7 @@ print("Project root:", PROJECT_ROOT)
 
 ```python
 # Build train/val/test JSONL in data/; each line has "text" and "labels" (word-level 0/1).
-!cd $PROJECT_ROOT && PYTHONPATH=$PROJECT_ROOT/slop_src python slop_scripts/build_data.py --output-dir data
+!cd $PROJECT_ROOT && PYTHONPATH=$PROJECT_ROOT/src python scripts/hill-climb_scripts/build_data.py --output-dir data
 !ls $PROJECT_ROOT/data
 !wc -l $PROJECT_ROOT/data/train.jsonl $PROJECT_ROOT/data/val.jsonl $PROJECT_ROOT/data/test.jsonl
 ```
@@ -70,8 +70,8 @@ print("Project root:", PROJECT_ROOT)
 
 ```python
 # Train DistilBERT classifier (curriculum); saves pytorch_model.bin + tokenizer to outputs/classifier_curriculum.
-!cd $PROJECT_ROOT && PYTHONPATH=$PROJECT_ROOT/slop_src python slop_scripts/train_token_classifier.py \
-  --config slop_configs/classifier_encoder.yaml \
+!cd $PROJECT_ROOT && PYTHONPATH=$PROJECT_ROOT/src python scripts/hill-climb_scripts/train_token_classifier.py \
+  --config configs/hill-climb_configs/classifier_encoder.yaml \
   --output-dir outputs/classifier_curriculum
 !ls -la $PROJECT_ROOT/outputs/classifier_curriculum/
 ```
@@ -82,7 +82,7 @@ print("Project root:", PROJECT_ROOT)
 
 ```python
 # Generate (human, slop) pairs from train.jsonl for T5 rewriter training.
-!cd $PROJECT_ROOT && PYTHONPATH=$PROJECT_ROOT/slop_src python slop_scripts/train_slop_generator.py generate \
+!cd $PROJECT_ROOT && PYTHONPATH=$PROJECT_ROOT/src python scripts/hill-climb_scripts/train_slop_generator.py generate \
   --input data/train.jsonl --output data/slop_pairs.jsonl
 !wc -l $PROJECT_ROOT/data/slop_pairs.jsonl
 ```
@@ -93,7 +93,7 @@ print("Project root:", PROJECT_ROOT)
 
 ```python
 # Train T5 on slop pairs; saves model + tokenizer to outputs/slop_rewriter.
-!cd $PROJECT_ROOT && PYTHONPATH=$PROJECT_ROOT/slop_src python slop_scripts/train_slop_generator.py train \
+!cd $PROJECT_ROOT && PYTHONPATH=$PROJECT_ROOT/src python scripts/hill-climb_scripts/train_slop_generator.py train \
   --train-path data/slop_pairs.jsonl \
   --output-dir outputs/slop_rewriter \
   --model-name t5-small --epochs 3
@@ -106,12 +106,12 @@ print("Project root:", PROJECT_ROOT)
 
 ```python
 # Hill-climb prompts with TinyLlama + classifier reward; saves best prompts to outputs/prompt_opt.
-!cd $PROJECT_ROOT && PYTHONPATH=$PROJECT_ROOT/slop_src python slop_scripts/optimize_prompts.py \
-  --config slop_configs/prompt_opt.yaml
+!cd $PROJECT_ROOT && PYTHONPATH=$PROJECT_ROOT/src python scripts/hill-climb_scripts/optimize_prompts.py \
+  --config configs/hill-climb_configs/prompt_opt.yaml
 !ls -la $PROJECT_ROOT/outputs/prompt_opt/
 ```
 
-Ensure `slop_configs/prompt_opt.yaml` has `reward.checkpoint_path: outputs/classifier_curriculum` so the trained classifier is used as the reward model.
+Ensure `configs/hill-climb_configs/prompt_opt.yaml` has `reward.checkpoint_path: outputs/classifier_curriculum` so the trained classifier is used as the reward model.
 
 ---
 
@@ -139,7 +139,7 @@ flowchart LR
 
 ```python
 # Show progress: evaluate classifier on test set (mean_reward, sequence_accuracy, n_samples).
-!cd $PROJECT_ROOT && PYTHONPATH=$PROJECT_ROOT/slop_src python slop_scripts/eval.py \
+!cd $PROJECT_ROOT && PYTHONPATH=$PROJECT_ROOT/src python scripts/hill-climb_scripts/eval.py \
   --classifier-path outputs/classifier_curriculum \
   --test-path data/test.jsonl \
   --output-path outputs/eval_results.json
@@ -151,7 +151,7 @@ flowchart LR
 
 ```python
 # Show progress: score test set with reward model; report mean/std and optional top/bottom examples.
-!cd $PROJECT_ROOT && PYTHONPATH=$PROJECT_ROOT/slop_src python slop_scripts/eval_reward_model.py \
+!cd $PROJECT_ROOT && PYTHONPATH=$PROJECT_ROOT/src python scripts/hill-climb_scripts/eval_reward_model.py \
   --data data/test.jsonl \
   --checkpoint outputs/classifier_curriculum \
   --show-examples 3
