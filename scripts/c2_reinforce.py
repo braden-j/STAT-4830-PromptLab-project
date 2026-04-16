@@ -53,7 +53,7 @@ LORA_ALPHA   = 32
 LORA_TARGETS = ["q_proj", "k_proj", "v_proj", "o_proj"]
 LORA_DROPOUT = 0.05
 
-N_STEPS           = 200
+N_STEPS           = 500
 N_ROLLOUTS        = 48
 MAX_NEW_TOKENS    = 512
 MIN_OUTPUT_TOKENS = 50
