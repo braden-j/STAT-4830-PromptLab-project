@@ -589,7 +589,23 @@ def main() -> None:
         action="store_true",
         help="Resume from the latest checkpoint in outputs/c2_checkpoints/",
     )
+    parser.add_argument(
+        "--n-rollouts",
+        type=int,
+        default=N_ROLLOUTS,
+        help=f"Rollouts per training step (default: {N_ROLLOUTS})",
+    )
+    parser.add_argument(
+        "--max-new-tokens",
+        type=int,
+        default=MAX_NEW_TOKENS,
+        help=f"Max new tokens per generation (default: {MAX_NEW_TOKENS})",
+    )
     args = parser.parse_args()
+
+    global N_ROLLOUTS, MAX_NEW_TOKENS
+    N_ROLLOUTS     = args.n_rollouts
+    MAX_NEW_TOKENS = args.max_new_tokens
 
     torch.manual_seed(SEED)
     os.makedirs(os.path.join(_REPO_ROOT, "outputs"), exist_ok=True)
