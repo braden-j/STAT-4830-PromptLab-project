@@ -113,17 +113,17 @@ def build_prompt(essay: str, tokenizer) -> str:
 def get_device() -> torch.device:
     if torch.cuda.is_available():
         dev = torch.device("cuda")
-        print(f"[device] CUDA: {torch.cuda.get_device_name(0)}")
+        print(f"[device] CUDA: {torch.cuda.get_device_name(0)}", flush=True)
     else:
         dev = torch.device("cpu")
-        print("[device] CPU  (no GPU found — training will be slow)")
+        print("[device] CPU  (no GPU found — training will be slow)", flush=True)
     return dev
 
 
 # ── Data ──────────────────────────────────────────────────────────────────────
 def load_train_prompts(n: int = N_ROLLOUTS, min_words: int = 80, max_words: int = 250) -> list[str]:
     """Load N ai_generated essays from pangram/editlens_iclr train split."""
-    print(f"[data]  Loading {n} ai_generated essays from train split ...")
+    print(f"[data]  Loading {n} ai_generated essays from train split ...", flush=True)
     ds = load_dataset("pangram/editlens_iclr", split="train", streaming=True)
     essays: list[str] = []
     for row in ds:
@@ -138,14 +138,14 @@ def load_train_prompts(n: int = N_ROLLOUTS, min_words: int = 80, max_words: int 
         essays.append(text)
         if len(essays) >= n:
             break
-    print(f"[data]  Collected {len(essays)} train prompts.\n")
+    print(f"[data]  Collected {len(essays)} train prompts.\n", flush=True)
     return essays
 
 
 def load_eval_essays(min_words: int = 80, max_words: int = 250) -> list[str]:
     """Load 50 ai_generated + 50 ai_edited from the test split for periodic eval."""
     total = EVAL_N_AI_GEN + EVAL_N_AI_EDIT
-    print(f"[eval-data] Loading {EVAL_N_AI_GEN} ai_generated + {EVAL_N_AI_EDIT} ai_edited from test split ...")
+    print(f"[eval-data] Loading {EVAL_N_AI_GEN} ai_generated + {EVAL_N_AI_EDIT} ai_edited from test split ...", flush=True)
     ds = load_dataset("pangram/editlens_iclr", split="test", streaming=True)
     counts  = {"ai_generated": 0, "ai_edited": 0}
     targets = {"ai_generated": EVAL_N_AI_GEN, "ai_edited": EVAL_N_AI_EDIT}
@@ -164,14 +164,14 @@ def load_eval_essays(min_words: int = 80, max_words: int = 250) -> list[str]:
         counts[tt] += 1
         if all(counts[k] >= targets[k] for k in targets):
             break
-    print(f"[eval-data] Collected {counts}  (target: {total} essays)\n")
+    print(f"[eval-data] Collected {counts}  (target: {total} essays)\n", flush=True)
     return essays
 
 
 # ── Policy — Llama-3.2-3B-Instruct + LoRA ────────────────────────────────────
 def load_policy(device: torch.device, checkpoint_path: str | None = None):
     """Load Llama-3.2-3B-Instruct with LoRA adapters. Optionally restore from checkpoint."""
-    print(f"[policy] Loading {POLICY_MODEL_ID} ...")
+    print(f"[policy] Loading {POLICY_MODEL_ID} ...", flush=True)
     dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
 
     tok = AutoTokenizer.from_pretrained(POLICY_MODEL_ID)
@@ -185,7 +185,7 @@ def load_policy(device: torch.device, checkpoint_path: str | None = None):
     )
 
     if checkpoint_path is not None:
-        print(f"[policy] Restoring LoRA from {checkpoint_path} ...")
+        print(f"[policy] Restoring LoRA from {checkpoint_path} ...", flush=True)
         model = PeftModel.from_pretrained(base, checkpoint_path, is_trainable=True)
     else:
         lora_cfg = LoraConfig(
@@ -205,7 +205,8 @@ def load_policy(device: torch.device, checkpoint_path: str | None = None):
     n_total = sum(p.numel() for p in model.parameters())
     print(
         f"[policy] LoRA r={LORA_R} α={LORA_ALPHA} on {LORA_TARGETS}\n"
-        f"[policy] Trainable: {n_train:,} / {n_total:,} params ({100*n_train/n_total:.3f}%)\n"
+        f"[policy] Trainable: {n_train:,} / {n_total:,} params ({100*n_train/n_total:.3f}%)\n",
+        flush=True,
     )
     return tok, model
 
@@ -213,7 +214,7 @@ def load_policy(device: torch.device, checkpoint_path: str | None = None):
 # ── Fluency reference — frozen Llama-3.2-3B base ─────────────────────────────
 def load_fluency_ref(device: torch.device):
     """Load meta-llama/Llama-3.2-3B base (frozen) for fluency scoring and KL eval."""
-    print(f"[fluency] Loading {FLUENCY_MODEL_ID} (frozen) ...")
+    print(f"[fluency] Loading {FLUENCY_MODEL_ID} (frozen) ...", flush=True)
     dtype = torch.bfloat16 if device.type == "cuda" else torch.float32
 
     tok = AutoTokenizer.from_pretrained(FLUENCY_MODEL_ID)
@@ -230,7 +231,7 @@ def load_fluency_ref(device: torch.device):
         p.requires_grad_(False)
 
     n = sum(p.numel() for p in mdl.parameters())
-    print(f"[fluency] Loaded {FLUENCY_MODEL_ID} ({n/1e9:.3f}B params, dtype={dtype}, frozen)\n")
+    print(f"[fluency] Loaded {FLUENCY_MODEL_ID} ({n/1e9:.3f}B params, dtype={dtype}, frozen)\n", flush=True)
     return tok, mdl
 
 
@@ -331,7 +332,7 @@ def run_eval(
     KL divergence is measured on raw eval texts (policy vs frozen base).
     """
     n = len(eval_essays)
-    print(f"\n[eval] Step {step}: scoring {n} held-out essays ...")
+    print(f"\n[eval] Step {step}: scoring {n} held-out essays ...", flush=True)
     policy_mdl.eval()
 
     el_vals:   list[float] = []
@@ -370,7 +371,7 @@ def run_eval(
             label_dist[label] += 1
 
             if (i + 1) % 10 == 0:
-                print(f"  [{i+1:3d}/{n}] EditLens={el:.4f}  R_fluency={fl:.4f}")
+                print(f"  [{i+1:3d}/{n}] EditLens={el:.4f}  R_fluency={fl:.4f}", flush=True)
 
     mean_el = sum(el_vals) / max(len(el_vals), 1)
     mean_fl = sum(fl_vals) / max(len(fl_vals), 1)
@@ -384,12 +385,14 @@ def run_eval(
 
     print(
         f"[eval] step={step}  mean_editlens={mean_el:.4f}  "
-        f"mean_fluency={mean_fl:.4f}  kl_div={kl_div:.4f}"
+        f"mean_fluency={mean_fl:.4f}  kl_div={kl_div:.4f}",
+        flush=True,
     )
     print(
         f"[eval] label_dist: "
         f"LABEL_0={label_pct[0]:.1f}%  LABEL_1={label_pct[1]:.1f}%  "
-        f"LABEL_2={label_pct[2]:.1f}%  LABEL_3={label_pct[3]:.1f}%\n"
+        f"LABEL_2={label_pct[2]:.1f}%  LABEL_3={label_pct[3]:.1f}%\n",
+        flush=True,
     )
 
     policy_mdl.train()
@@ -416,7 +419,7 @@ def save_checkpoint(step: int, policy_mdl, optimizer, checkpoint_dir: str) -> No
     torch.save(optimizer.state_dict(), os.path.join(path, "optimizer.pt"))
     with open(os.path.join(path, "step.json"), "w") as f:
         json.dump({"step": step}, f)
-    print(f"[ckpt] Saved checkpoint → {path}")
+    print(f"[ckpt] Saved checkpoint → {path}", flush=True)
 
 
 def find_latest_checkpoint(checkpoint_dir: str) -> tuple[str | None, int]:
@@ -471,28 +474,42 @@ def reinforce_step(
     n_rejected = 0
 
     with torch.no_grad():
-        for essay in essays:
-            essay_ids       = policy_tok(essay, add_special_tokens=False)["input_ids"]
-            essay_token_len = len(essay_ids)
+        # Pre-compute per-essay token lengths for the min-length ratio check
+        essay_token_lens = [
+            len(policy_tok(essay, add_special_tokens=False)["input_ids"])
+            for essay in essays
+        ]
 
-            prompt_text = build_prompt(essay, policy_tok)
-            enc = policy_tok(
-                prompt_text,
-                return_tensors="pt",
-                truncation=True,
-                max_length=512,
-            ).to(device)
-            prompt_len = enc["input_ids"].shape[1]
+        # Tokenize all prompts as a left-padded batch and generate in one call
+        prompt_texts = [build_prompt(essay, policy_tok) for essay in essays]
+        policy_tok.padding_side = "left"
+        enc = policy_tok(
+            prompt_texts,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=512,
+        ).to(device)
+        prompt_len = enc["input_ids"].shape[1]  # padded length, same for every row
 
-            out = policy_mdl.generate(
-                **enc,
-                max_new_tokens=max_new_tokens,
-                do_sample=True,
-                temperature=0.8,
-                pad_token_id=policy_tok.eos_token_id,
-            )
-            gen_ids = out[0, prompt_len:]
-            n_gen   = gen_ids.shape[0]
+        out = policy_mdl.generate(
+            input_ids=enc["input_ids"],
+            attention_mask=enc["attention_mask"],
+            max_new_tokens=max_new_tokens,
+            do_sample=True,
+            temperature=0.8,
+            pad_token_id=policy_tok.eos_token_id,
+        )
+        # out: (B, prompt_len + max_new_tokens); generated tokens start at prompt_len
+
+        eos_id = policy_tok.eos_token_id
+        for i, (essay, essay_token_len) in enumerate(zip(essays, essay_token_lens)):
+            # Slice this row's generated tokens and trim trailing EOS/pad
+            gen_ids = out[i, prompt_len:]
+            eos_pos = (gen_ids == eos_id).nonzero(as_tuple=False)
+            if len(eos_pos) > 0:
+                gen_ids = gen_ids[: eos_pos[0, 0].item()]
+            n_gen = gen_ids.shape[0]
 
             if not passes_min_length(n_gen, essay_token_len):
                 n_rejected += 1
@@ -521,7 +538,7 @@ def reinforce_step(
             fl_raw.append(fl)
             kl_scores.append(kl_val)
             accepted_inputs.append(
-                (enc["input_ids"].cpu(), gen_ids.cpu(), prompt_len, essay_token_len)
+                (enc["input_ids"][i].unsqueeze(0).cpu(), gen_ids.cpu(), prompt_len, essay_token_len)
             )
 
     if not accepted_inputs:
@@ -611,10 +628,10 @@ def main() -> None:
     torch.manual_seed(SEED)
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
-    print("=" * 64)
-    print("  C2 REINFORCE — 500-step Training Run")
-    print("  STAT 4830 PromptLab Deslopifier")
-    print("=" * 64 + "\n")
+    print("=" * 64, flush=True)
+    print("  C2 REINFORCE — 500-step Training Run", flush=True)
+    print("  STAT 4830 PromptLab Deslopifier", flush=True)
+    print("=" * 64 + "\n", flush=True)
 
     device = get_device()
 
@@ -628,9 +645,9 @@ def main() -> None:
     if args.resume:
         ckpt_path, start_step = find_latest_checkpoint(CHECKPOINT_DIR)
         if ckpt_path is None:
-            print("[resume] No checkpoint found; starting from step 0.\n")
+            print("[resume] No checkpoint found; starting from step 0.\n", flush=True)
         else:
-            print(f"[resume] Resuming from step {start_step}: {ckpt_path}\n")
+            print(f"[resume] Resuming from step {start_step}: {ckpt_path}\n", flush=True)
 
     # Load models
     el_tok, el_mdl              = load_editlens(device)
@@ -647,18 +664,19 @@ def main() -> None:
         opt_path = os.path.join(ckpt_path, "optimizer.pt")
         if os.path.isfile(opt_path):
             optimizer.load_state_dict(torch.load(opt_path, map_location=device))
-            print(f"[resume] Loaded optimizer state from {opt_path}\n")
+            print(f"[resume] Loaded optimizer state from {opt_path}\n", flush=True)
 
     # Header
     print(
         f"Config: {N_STEPS} steps × {n_rollouts} rollouts  |  "
         f"min_tokens={MIN_OUTPUT_TOKENS}  min_ratio={MIN_OUTPUT_RATIO}  "
-        f"lr={LR}  clip={GRAD_CLIP_NORM}  kl_penalty={KL_PENALTY}\n"
+        f"lr={LR}  clip={GRAD_CLIP_NORM}  kl_penalty={KL_PENALTY}\n",
+        flush=True,
     )
     if start_step > 0:
-        print(f"Resuming from step {start_step}\n")
-    print(f"{'step':>5}  {'mean_reward':>11}  {'grad_norm':>9}  {'rejected':>24}")
-    print("-" * 56)
+        print(f"Resuming from step {start_step}\n", flush=True)
+    print(f"{'step':>5}  {'mean_reward':>11}  {'grad_norm':>9}  {'rejected':>24}", flush=True)
+    print("-" * 56, flush=True)
 
     for step in range(start_step, N_STEPS):
         mean_r, gnorm, n_rej = reinforce_step(
@@ -687,7 +705,7 @@ def main() -> None:
             if n_rej > 0
             else f"0/{n_rollouts} none"
         )
-        print(f"{step+1:>5}  {mean_r:>11.4f}  {gnorm:>9.4f}  {rej_str}")
+        print(f"{step+1:>5}  {mean_r:>11.4f}  {gnorm:>9.4f}  {rej_str}", flush=True)
 
         # Eval every EVAL_INTERVAL steps (1-indexed: step 50, 100, …, 500)
         if (step + 1) % EVAL_INTERVAL == 0:
@@ -708,12 +726,12 @@ def main() -> None:
         if (step + 1) % CHECKPOINT_INTERVAL == 0:
             save_checkpoint(step + 1, policy_mdl, optimizer, CHECKPOINT_DIR)
 
-    print("\n" + "=" * 64)
-    print("  C2 REINFORCE TRAINING COMPLETE")
-    print(f"  Training log → {LOG_PATH}")
-    print(f"  Eval log     → {EVAL_LOG_PATH}")
-    print(f"  Checkpoints  → {CHECKPOINT_DIR}")
-    print("=" * 64)
+    print("\n" + "=" * 64, flush=True)
+    print("  C2 REINFORCE TRAINING COMPLETE", flush=True)
+    print(f"  Training log → {LOG_PATH}", flush=True)
+    print(f"  Eval log     → {EVAL_LOG_PATH}", flush=True)
+    print(f"  Checkpoints  → {CHECKPOINT_DIR}", flush=True)
+    print("=" * 64, flush=True)
 
 
 if __name__ == "__main__":
