@@ -564,30 +564,32 @@ def reinforce_step(
     mean_reward = sum(rewards) / len(rewards)
 
     # ── Phase 3: recompute log-probs WITH grad (REINFORCE policy gradient) ─
+    # Process one rollout at a time and call .backward() immediately to avoid
+    # accumulating all activation tensors in VRAM simultaneously.
+    # Dividing each loss by n_accepted before .backward() is mathematically
+    # equivalent to computing the mean and calling .backward() once.
     policy_mdl.train()
     optimizer.zero_grad()
-
-    losses: list[torch.Tensor] = []
+    n_accepted = len(accepted_inputs)
 
     for (prompt_ids, gen_ids, p_len, _), reward in zip(accepted_inputs, rewards):
         prompt_ids = prompt_ids.to(device)
         gen_ids    = gen_ids.to(device)
 
-        full_ids      = torch.cat([prompt_ids, gen_ids.unsqueeze(0)], dim=1)  # (1, P+G)
-        logits        = policy_mdl(full_ids).logits                            # (1, P+G, V)
-        log_probs_all = F.log_softmax(logits, dim=-1)                          # (1, P+G, V)
+        full_ids      = torch.cat([prompt_ids, gen_ids.unsqueeze(0)], dim=1)
+        logits        = policy_mdl(full_ids).logits
+        log_probs_all = F.log_softmax(logits, dim=-1)
 
         G = gen_ids.shape[0]
-        gen_log_probs = log_probs_all[0, p_len - 1 : p_len - 1 + G, :]        # (G, V)
-        per_tok_lp    = gen_log_probs.gather(
-            1, gen_ids.unsqueeze(1)
-        ).squeeze(1)                                                            # (G,)
+        gen_log_probs = log_probs_all[0, p_len - 1 : p_len - 1 + G, :]
+        per_tok_lp    = gen_log_probs.gather(1, gen_ids.unsqueeze(1)).squeeze(1)
+        seq_lp        = per_tok_lp.mean()
 
-        seq_lp = per_tok_lp.mean()
-        losses.append(-seq_lp * reward)
+        loss = -seq_lp * reward / n_accepted
+        loss.backward()
 
-    loss = torch.stack(losses).mean()
-    loss.backward()
+        del full_ids, logits, log_probs_all, gen_log_probs, per_tok_lp, loss
+        torch.cuda.empty_cache()
 
     grad_norm = torch.nn.utils.clip_grad_norm_(
         [p for p in policy_mdl.parameters() if p.requires_grad],
