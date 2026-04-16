@@ -454,6 +454,7 @@ def reinforce_step(
     fl_tok, fl_mdl,
     optimizer: torch.optim.Optimizer,
     device: torch.device,
+    max_new_tokens: int = MAX_NEW_TOKENS,
 ) -> tuple[float, float, int]:
     """
     Execute one REINFORCE step over the essay prompts.
@@ -485,7 +486,7 @@ def reinforce_step(
 
             out = policy_mdl.generate(
                 **enc,
-                max_new_tokens=MAX_NEW_TOKENS,
+                max_new_tokens=max_new_tokens,
                 do_sample=True,
                 temperature=0.8,
                 pad_token_id=policy_tok.eos_token_id,
@@ -603,12 +604,11 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    global N_ROLLOUTS, MAX_NEW_TOKENS
-    N_ROLLOUTS     = args.n_rollouts
-    MAX_NEW_TOKENS = args.max_new_tokens
+    n_rollouts     = args.n_rollouts
+    max_new_tokens = args.max_new_tokens
 
-    torch.manual_seed(SEED)
     os.makedirs(os.path.join(_REPO_ROOT, "outputs"), exist_ok=True)
+    torch.manual_seed(SEED)
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
     print("=" * 64)
@@ -619,7 +619,7 @@ def main() -> None:
     device = get_device()
 
     # Load data
-    essays_pool = load_train_prompts(n=1000)
+    essays_pool = load_train_prompts(n=max(1000, n_rollouts))
     eval_essays = load_eval_essays()
 
     # Determine resume state
@@ -651,7 +651,7 @@ def main() -> None:
 
     # Header
     print(
-        f"Config: {N_STEPS} steps × {N_ROLLOUTS} rollouts  |  "
+        f"Config: {N_STEPS} steps × {n_rollouts} rollouts  |  "
         f"min_tokens={MIN_OUTPUT_TOKENS}  min_ratio={MIN_OUTPUT_RATIO}  "
         f"lr={LR}  clip={GRAD_CLIP_NORM}  kl_penalty={KL_PENALTY}\n"
     )
@@ -663,7 +663,7 @@ def main() -> None:
     for step in range(start_step, N_STEPS):
         mean_r, gnorm, n_rej = reinforce_step(
             step_idx=step,
-            essays=random.sample(essays_pool, N_ROLLOUTS),
+            essays=random.sample(essays_pool, n_rollouts),
             policy_tok=policy_tok,
             policy_mdl=policy_mdl,
             el_tok=el_tok,
@@ -672,6 +672,7 @@ def main() -> None:
             fl_mdl=fl_mdl,
             optimizer=optimizer,
             device=device,
+            max_new_tokens=max_new_tokens,
         )
 
         append_jsonl(LOG_PATH, {
@@ -682,9 +683,9 @@ def main() -> None:
         })
 
         rej_str = (
-            f"{n_rej}/{N_ROLLOUTS} YES (filter fired)"
+            f"{n_rej}/{n_rollouts} YES (filter fired)"
             if n_rej > 0
-            else f"0/{N_ROLLOUTS} none"
+            else f"0/{n_rollouts} none"
         )
         print(f"{step+1:>5}  {mean_r:>11.4f}  {gnorm:>9.4f}  {rej_str}")
 
