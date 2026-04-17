@@ -1,0 +1,10 @@
+{"step": 50, "mean_editlens": 0.7677072914871192, "mean_fluency": -1.9175649297237396, "kl_div": 0.397158203125, "label_dist": {"LABEL_0": 1.0, "LABEL_1": 29.0, "LABEL_2": 0.0, "LABEL_3": 70.0}}
+{"step": 100, "mean_editlens": 0.7663524515546062, "mean_fluency": -1.9173144578933716, "kl_div": 0.42146484375, "label_dist": {"LABEL_0": 0.0, "LABEL_1": 32.0, "LABEL_2": 0.0, "LABEL_3": 68.0}}
+{"step": 150, "mean_editlens": 0.753528510391043, "mean_fluency": -1.9175181519985198, "kl_div": 0.456650390625, "label_dist": {"LABEL_0": 0.0, "LABEL_1": 36.0, "LABEL_2": 0.0, "LABEL_3": 64.0}}
+{"step": 200, "mean_editlens": 0.7246358817233219, "mean_fluency": -2.002656872868538, "kl_div": 0.481396484375, "label_dist": {"LABEL_0": 3.0, "LABEL_1": 39.0, "LABEL_2": 0.0, "LABEL_3": 58.0}}
+{"step": 250, "mean_editlens": 0.6819240145143705, "mean_fluency": -1.8532327204942702, "kl_div": 0.51328125, "label_dist": {"LABEL_0": 4.0, "LABEL_1": 44.0, "LABEL_2": 0.0, "LABEL_3": 52.0}}
+{"step": 300, "mean_editlens": 0.7025860054269529, "mean_fluency": -1.8252998989820481, "kl_div": 0.54951171875, "label_dist": {"LABEL_0": 5.0, "LABEL_1": 35.0, "LABEL_2": 0.0, "LABEL_3": 60.0}}
+{"step": 350, "mean_editlens": 0.7178412074001003, "mean_fluency": -1.8288004052639009, "kl_div": 0.551328125, "label_dist": {"LABEL_0": 5.0, "LABEL_1": 33.0, "LABEL_2": 0.0, "LABEL_3": 62.0}}
+{"step": 400, "mean_editlens": 0.6749259405225649, "mean_fluency": -1.8780541190505027, "kl_div": 0.580400390625, "label_dist": {"LABEL_0": 11.0, "LABEL_1": 31.0, "LABEL_2": 0.0, "LABEL_3": 58.0}}
+{"step": 450, "mean_editlens": 0.6849683498301602, "mean_fluency": -2.0044064635038374, "kl_div": 0.54470703125, "label_dist": {"LABEL_0": 9.0, "LABEL_1": 34.0, "LABEL_2": 1.0, "LABEL_3": 56.0}}
+{"step": 500, "mean_editlens": 0.6699913895835927, "mean_fluency": -2.023585929274559, "kl_div": 0.518310546875, "label_dist": {"LABEL_0": 11.0, "LABEL_1": 34.0, "LABEL_2": 0.0, "LABEL_3": 55.0}}
