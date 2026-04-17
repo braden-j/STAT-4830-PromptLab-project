@@ -25,6 +25,13 @@ dependencies = [
 [project.optional-dependencies]
 unsloth = ["unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"]
 wandb = ["wandb>=0.16.0"]
+tournament = [
+    "wandb>=0.16.0",
+    "trl>=0.9.0",
+    "sentence-transformers>=3.0.0",
+    "psutil>=5.9.0",
+    "matplotlib>=3.8.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",

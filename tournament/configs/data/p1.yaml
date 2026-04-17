@@ -1,0 +1,3 @@
+p0: tournament/data/packs/p0_pairs.jsonl
+out: tournament/data/packs/p1_curriculum.jsonl
+manifest_out: tournament/data/packs/p1_manifest.json

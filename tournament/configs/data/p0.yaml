@@ -1,0 +1,3 @@
+source_pool: tournament/data/source_pool.jsonl
+out: tournament/data/packs/p0_pairs.jsonl
+manifest_out: tournament/data/packs/p0_manifest.json

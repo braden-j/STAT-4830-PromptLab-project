@@ -1,0 +1,4 @@
+p0: tournament/data/packs/p0_pairs.jsonl
+m2_failures: tournament/outputs/runs/m2_full_lora/m2_failures.jsonl
+out: tournament/data/packs/p2_hard.jsonl
+manifest_out: tournament/data/packs/p2_manifest.json

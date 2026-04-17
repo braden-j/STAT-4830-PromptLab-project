@@ -1,698 +1,476 @@
-# STAT 4830 — PromptLab Deslopifier
-# Detailed Experiment Specification (v2 — revised with Open Pangram / EditLens)
+# STAT 4830 — Transformer Deslopifier Tournament
+# Detailed Experiment Specification (v2.1 — transformer fine-tuning tournament revision)
 
-**Date:** April 9, 2026
-**Final Presentation:** ~April 17, 2026
-**Compute:** H100 via Prime Intellect
-**Key update since v1:** Pangram released open-source EditLens models and a 60k training dataset on March 24, 2026. This eliminates all API costs, resolves the reward format question, provides a production-quality reward model locally, and reframes the task as a continuous regression problem rather than a binary classification. See Section 2 for full details.
-
----
-
-## 0. Framing & North Star
-
-The goal is to train a **Deslopifier** — a model that rewrites AI-generated text to reduce its detectable AI signature while preserving fluency and coherence. The system is framed as a **reinforcement learning problem**:
-
-- **Policy** `π_θ`: a trainable LM that rewrites essays
-- **Reward** `R`: a combination of (1) EditLens detection score and (2) a fluency signal via log-probabilities under a frozen reference model
-- **Optimization**: REINFORCE or GRPO gradient updates on the policy
-
-The task is now understood more richly than binary "AI vs human." Per the EditLens paper (ICLR 2026), the relevant spectrum is:
-
-```
-Fully AI-generated  ──────►  AI-edited  ──────►  Fully human-written
-      score ≈ 1.0               score ≈ 0.5              score ≈ 0.0
-```
-
-The deslopifier is trained to move essays leftward along this axis — ideally all the way to the human end, but even reaching the "AI-edited" range is a meaningful and measurable result. This continuous framing is better for RL than a binary threshold: the reward is always dense, the gradient is always informative, and partial progress is visible and reportable.
-
-**The professor's explicit workflow:** Write Big Spec → Iterate on it multiple times → Convert to scripts → Commit to GitHub → Run on server. This document is the output of the spec-writing stage.
+**Date:** April 9, 2026  
+**Final Presentation:** ~April 17, 2026  
+**Compute:** H100 via Prime Intellect  
+**Primary reward and judge:** Pangram EditLens (`pangram/editlens_Llama-3.2-3B`)  
+**Fast development scorer:** `pangram/editlens_roberta-large`
 
 ---
 
-## 1. Current State Baseline
+## 0. What Changed in This Revision
 
-### 1.1 Classifier — Three Generations (pre-EditLens)
+The old spec mixed together reward setup, classifier hardening, RL ideas, and broad exploratory experiments. This revision changes the emphasis completely:
 
-| Version | Backbone | Slop Generator | Notes |
-|---|---|---|---|
-| v1 | DistilGPT2 (causal) | Character corruption | Near-100% AUC — inflated by corruption artifacts |
-| v1.5 | DistilGPT2 (causal) | Mirror-prompting via Qwen 0.5B | Ablation: isolates slop quality effect |
-| v2 | DistilBERT (bidirectional) + LoRA | Mirror-prompting via Qwen 0.5B | Current best; logistic baseline AUC ~1.0 (likely too easy) |
+- The project is now a **controlled model tournament**.
+- Every real experiment must output a **trained model checkpoint**.
+- The main question is no longer "can we build a reward?" but rather:
 
-These classifiers are now superseded by EditLens as the primary reward model. They remain useful as lightweight secondary scorers and for understanding what our own approach learned.
+> Which transformer fine-tuning strategy produces the best deslopifier under the same Pangram reward and the same evaluation harness?
 
-### 1.2 Hill-Climbing Prompt Optimizer
+- Hill climbing is still important, but it is now used in two narrower ways:
+  - as a **baseline to beat**
+  - as a **data engine** for one distillation experiment
 
-Population-based hill climbing (`evolve.py`) with TinyLlama (1.1B) as the frozen generator and the local DistilBERT classifier as the reward. This has never been run against EditLens or any external detector. Its primary limitation is that the reward signal (our own DistilBERT) is too weak and dataset-specific.
+This makes the final presentation cleaner. Instead of many loosely related claims, the report can tell one story:
 
-### 1.3 What Does Not Yet Exist
-
-- Integration of EditLens as reward model
-- Any gradient-based RL training (REINFORCE or GRPO)
-- Any experiment at model size > 1.1B
-- Hard negative mining using the EditLens dataset
-- End-to-end evaluation of deslopified outputs against any detector
+1. We fixed a common rewrite task.
+2. We trained multiple transformer variants under comparable conditions.
+3. Pangram judged all of them.
+4. We ran a tournament and got a winner.
 
 ---
 
-## 2. The Open Pangram / EditLens Release — What It Changes
+## 1. North Star
 
-On March 24, 2026, Pangram released their EditLens models and dataset under CC BY-NC-SA 4.0 (non-commercial use; appropriate for this course project). This section documents exactly what changed from the v1 spec.
+Train a transformer that rewrites AI-slop text into lower-Pangram-score text while preserving meaning, approximate length, and fluency.
 
-### 2.1 What Was Released
+The final deliverable is not just a notebook result. It is a **leaderboard of trained models**, each produced by a different fine-tuning strategy, with one winner chosen under a fixed blind evaluation set.
 
-**Two models on HuggingFace** (`huggingface.co/pangram`):
+---
 
-| Model | Parameters | Base | Max Tokens | Notes |
-|---|---|---|---|---|
-| `pangram/editlens_Llama-3.2-3B` | 3B | `meta-llama/Llama-3.2-3B` | 1024 | QLoRA fine-tuned; production-quality |
-| `pangram/editlens_roberta-large` | 355M | RoBERTa-Large | 512 | Faster; weaker on OOD |
+## 2. Common Tournament Harness
 
-Both return a **continuous score in [0, 1]**: 0 = fully human-written, 1 = fully AI-generated. AI-edited text falls in between, typically 0.3–0.7 depending on the degree of editing.
+### 2.1 Common Task
 
-**Dataset: `pangram/editlens_iclr`**
+Each tournament model solves the same task:
 
-| Split | Size | Classes |
+- **Input:** a sloppy or AI-looking passage
+- **Output:** a rewrite of that same passage
+- **Goal:** reduce Pangram/EditLens score as much as possible without changing the meaning too much
+
+This is a **text-to-text transformer fine-tuning problem**. The tournament is about how we fine-tune the transformer, not about changing the task between models.
+
+### 2.2 Canonical Source Pool
+
+Lock one shared source pool and derive every tournament dataset from it.
+
+- **Essay source texts:** Kaggle essays and essay-style material from the token-classifier and verifier notebooks
+- **Prompt-response source texts:** HH-RLHF and Dolly-style instruction data from the prompt-risk and prompt-rewriter notebooks
+- **QA source texts:** DefAn-style definitive-answer examples from the GAN notebook
+
+Use one fixed split for the whole tournament:
+
+- **Train source pool:** 9,000 source texts
+- **Validation source pool:** 1,500 source texts
+- **Test source pool:** 1,500 source texts
+
+Target balance:
+
+- 1/3 essay-like longform
+- 1/3 prompt-response explanation text
+- 1/3 QA / definitive-answer text
+
+Important constraint: every tournament entrant should train from text derived from this same source pool. Experiments may transform or filter the data differently, but they should not swap to a totally different corpus.
+
+### 2.3 Canonical Data Packs
+
+All experiments must use one of the following data packs, each derived from the same source pool.
+
+| Pack | Description | Used For |
 |---|---|---|
-| Train | 60,000 | Human / AI-generated / AI-edited |
-| Validation | 2,400 | Same |
-| Test | 6,000 | Same |
-| OOD (Enron emails) | ~6,000 | Same |
-| OOD (Llama 3.3 70B Instruct) | ~6,000 | Same |
+| `P0 Base Pair Pack` | `(slop_text -> cleaner reference text)` pairs from mirror prompting, paired human text, and existing rewrite assets | SFT entrants |
+| `P1 Curriculum Pack` | Same pairs as `P0`, bucketed by Pangram score gap or rewrite difficulty: easy -> medium -> hard | Curriculum entrant |
+| `P2 Hard Pack` | Same source texts, but weighted toward the highest-Pangram or most failure-prone examples | Hard-negative entrant |
+| `P3 Preference Pack` | Same source texts, but each input has 3-5 candidate rewrites ranked by Pangram delta under a similarity filter | DPO entrant |
+| `P4 Hill Pack` | Same prompts/source texts, but targets come from hill-climbed prompt outputs that beat the frozen baseline | Distillation entrant |
 
-Domains: news, creative writing, Amazon reviews, Google reviews, education web content. AI text generated by GPT-4.1, Claude Sonnet 4, and Gemini 2.5 Flash. Also released: the Grammarly edits dataset (1,800 texts × 9 edit types).
+The comparability rule is simple:
 
-**Source code**: `github.com/pangramlabs/EditLens`
+- Experiments can change **how** the data is weighted, ordered, or labeled.
+- Experiments should not change **what universe of source texts** they are drawn from.
 
-### 2.2 The EditLens Architecture (Key Technical Detail)
+### 2.4 Fixed Backbone Rule
 
-EditLens is a **regression model** trained with *similarity metrics as intermediate supervision*. Given a text, it predicts how much AI editing it contains, calibrated against the degree of semantic and surface-level change from the hypothetical original human source. This is not a simple binary classifier — it is trained to understand the *degree* of AI contribution.
+To keep the tournament apples-to-apples, use one primary backbone family for most entrants:
 
-This is directly relevant to the deslopifier design. The deslopifier is, by definition, an AI-editing tool. The EditLens model was specifically trained to distinguish AI-edited text from both fully human and fully AI text. Training a deslopifier to fool EditLens means training it to make edits that look like a human editor made them — light-touch, targeted, stylistically coherent — rather than wholesale rewrites or generation from scratch.
+- **Primary backbone:** `TinyLlama/TinyLlama-1.1B-Chat-v1.0`
 
-### 2.3 Open Questions Resolved from v1 Spec
+This choice is justified because:
 
-**Q2 (critical): Does Pangram return a smooth probability or a categorical label?**
-**RESOLVED.** EditLens returns a continuous [0,1] score. No sparsity problem. The gradient is dense and informative throughout training.
+- it already appears in the hill-climbing pipeline
+- it is cheap enough to train multiple times in a week
+- it is large enough that LoRA vs partial unfreeze vs full fine-tune is a meaningful comparison
 
-**Q3: What is the frozen reference model for fluency?**
-**RESOLVED.** Use `meta-llama/Llama-3.2-3B` (the base model of `editlens_Llama-3.2-3B`, without EditLens fine-tuning). This gives a clean separation: the fluency reward comes from the general-purpose Llama 3.2 3B log-probabilities, while the detection reward comes from the EditLens fine-tuned version of the same architecture. No circular dependency, architecturally consistent.
+One wildcard entrant is allowed to use a different backbone:
 
-**API cost question:** Fully eliminated. All reward computation runs locally on GPU. The ~$200 Pangram API budget from v1 is no longer needed. This removes API rate limits as a constraint on batch size and eval frequency.
+- **Wildcard backbone:** `Qwen/Qwen2.5-1.5B-Instruct` with QLoRA
 
-### 2.4 New Things Made Possible
+That entrant is explicitly testing scale and architecture transfer, not strict same-backbone comparability.
 
-- **B2 simplified**: The EditLens training dataset (60k examples, 4 domains, GPT-4.1/Claude/Gemini generated) is a far better training corpus than our Qwen mirror-prompting approach. We can fine-tune our own version of EditLens or use the released checkpoints directly.
-- **Ternary progression as a metric**: We can now track not just binary "human vs AI" but whether our deslopifier moves essays from the "fully AI" zone (score ≈ 1) to the "AI-edited" zone (score ≈ 0.5) to the "human" zone (score ≈ 0). This is a richer and more honest story for the presentation (see new Experiment E5).
-- **Grammarly insight for E3**: The Grammarly dataset shows that small grammar fixes ("Fix any mistakes") yield EditLens scores near 0, while additive rewrites ("Make it more detailed") yield scores near 0.5+. This gives a concrete hypothesis for what stylistic changes the deslopifier should learn: targeted, light-touch edits, not wholesale rewrites.
-- **Faster iteration**: With a local 355M reward model (`editlens_roberta-large`), we can do rapid ablations and debugging cheaply before running the full 3B model experiments on the H100.
+### 2.5 Fixed Decode and Eval Rule
 
-### 2.5 License Note
+All tournament models must be evaluated the same way.
 
-CC BY-NC-SA 4.0 — non-commercial use only. This is appropriate for a course project. The final report must cite the EditLens paper (Thai et al., ICLR 2026, arXiv:2510.03154) and acknowledge the dataset/model release.
+- Use the same effective training token budget for all `TinyLlama` entrants
+- Decode with deterministic or near-deterministic settings
+- Use the same maximum output length cap
+- Use the same held-out input set
+- Use the same Pangram scorer for official ranking
+
+Recommended evaluation decode:
+
+- `temperature = 0.0`
+- `top_p = 1.0`
+- `max_new_tokens` matched to the task cap
+- no custom prompt hacks at evaluation time
+
+The tournament is about model weights. Prompt-only tricks are not allowed to decide the winner.
+
+For comparability:
+
+- `M1-M9` should use the same source split, same max sequence length, and same total number of seen training tokens
+- `M10` may use a different memory recipe because it is the scale wildcard, but it should still train on the same source pool and same objective family as `M1-M4`
+
+### 2.6 Pangram Reward and Qualification Gates
+
+All entrants are ranked primarily by Pangram.
+
+### Primary tournament metric
+
+For each held-out input:
+
+`Delta_EditLens = EditLens(input) - EditLens(output)`
+
+Higher is better.
+
+Official ranking uses:
+
+- **Primary judge:** `pangram/editlens_Llama-3.2-3B`
+
+Cheap inner-loop filtering can use:
+
+- `pangram/editlens_roberta-large`
+
+But checkpoint selection for the leaderboard and all final reporting should use the 3B Pangram model on the same validation split.
+
+### Qualification gates
+
+A model only qualifies for the final leaderboard if it also passes:
+
+- **Semantic similarity:** mean similarity >= 0.88 on the held-out set
+- **Length discipline:** median output/input length ratio in `[0.80, 1.25]`
+- **Validity:** fewer than 2% degenerate outputs
+
+Among models that pass those gates, the winner is the model with the highest mean `Delta_EditLens`.
+
+### Tie-breakers
+
+If two models are close, break ties in this order:
+
+1. lower mean final Pangram score
+2. higher semantic similarity
+3. lower variance across domains
 
 ---
 
-## 3. Experiment Overview
+## 3. Reference Baselines (Not Eligible to Win)
 
-Five groups, designed to be run in order since later groups depend on earlier outputs.
+These are important comparison points, but they are not tournament entrants because they are not newly fine-tuned model checkpoints.
 
-| Group | Name | Priority | Compute | Changed from v1? |
+### B0. Frozen generator baseline
+
+- Frozen `TinyLlama/TinyLlama-1.1B-Chat-v1.0`
+- Original prompt / no rewrite model
+
+### B1. Hill-climbed prompt baseline
+
+- Frozen TinyLlama
+- Best prompt found by the existing hill-climbing pipeline
+
+### B2. Existing prompt-rewriter baseline
+
+- Current FLAN-T5 prompt-rewriter notebook setup, if available
+
+These three baselines define the floor and the search-time bar. The tournament winner should ideally beat B1, because B1 is the strongest existing non-gradient method in the repo.
+
+---
+
+## 4. Tournament Entrants at a Glance
+
+| ID | Model Family | Data Pack | Objective | Main Difference |
 |---|---|---|---|---|
-| A | Reward Model Setup & Validation | **Critical** | Low (local GPU) | ✅ Simplified — no API |
-| B | Classifier Hardening via EditLens Dataset | High | Medium (T4) | ✅ Simplified — dataset exists |
-| C | RL Training Loop (REINFORCE / GRPO) | **Critical** | High (H100) | ✅ Updated reward model |
-| D | Architecture & Model Size | High | High (H100) | Minor updates |
-| E | Evaluation & Analysis | **Critical** | Low–Medium | ✅ New Experiment E5 added |
+| `M1` | TinyLlama | `P0` | SFT | Attention-only LoRA |
+| `M2` | TinyLlama | `P0` | SFT | Broader LoRA over attention + MLP |
+| `M3` | TinyLlama | `P0` | SFT | Last-block full-weight unfreeze |
+| `M4` | TinyLlama | `P0` | SFT | Full-model fine-tune |
+| `M5` | TinyLlama | `P1` | SFT | Curriculum fine-tuning |
+| `M6` | TinyLlama | `P2` | SFT | Hard-negative fine-tuning |
+| `M7` | TinyLlama | `P3` | DPO | Preference tuning with Pangram-ranked pairs |
+| `M8` | TinyLlama | online from source pool | GRPO | Direct Pangram-reward optimization |
+| `M9` | TinyLlama | `P4` | SFT | Hill-climb distillation |
+| `M10` | Qwen 1.5B | `P0` | QLoRA SFT | Scale and architecture wildcard |
+
+The intended logic is:
+
+- `M1-M4` isolate **which parameters should be trainable**
+- `M5-M6` isolate **what to do with the data**
+- `M7-M8` isolate **which training objective aligns best with Pangram**
+- `M9` tests whether **search can be compressed into weights**
+- `M10` tests whether **scale beats technique**
 
 ---
 
-## 4. Group A — Reward Model Setup & Validation
+## 5. Detailed Experiments
 
-**Purpose:** Establish and validate the full reward signal before any RL training. With EditLens available locally, this group is substantially faster than in v1. The goal is to confirm the reward is reliable and well-calibrated before committing H100 time.
+### M1. Attention-Only LoRA Control
 
----
+- **Question:** How far can we get by training only attention adapters on the shared rewrite task?
+- **Backbone:** `TinyLlama/TinyLlama-1.1B-Chat-v1.0`
+- **Trainable parameters:** LoRA on attention projections only; base model frozen; LM head saved if needed
+- **Training data:** `P0 Base Pair Pack`
+- **Objective:** standard supervised fine-tuning on `(slop_text -> cleaner reference text)` pairs
+- **Source notebooks:** `notebooks/Hill_Climb_notebooks/slop_pipeline_colab.ipynb`, `notebooks/ai_slop_prompt_rewriter_colab_v3 (1).ipynb`, `notebooks/build_mirror_dataset (2).ipynb`
+- **Why it matters:** This is the cheapest serious transformer fine-tune and should be the control entrant for the entire tournament.
+- **Interesting if false:** If this already wins or nearly wins, the project learns that aggressive unfreezing is unnecessary and parameter-efficient fine-tuning is enough.
+- **Outputs:** one checkpoint, validation curves, held-out rewrite samples, Pangram delta table
+- **Rough compute:** low to medium
 
-### Experiment A1: EditLens Baseline Evaluation of Current Outputs
+### M2. Full-Module LoRA
 
-**What:** Load both EditLens models locally and score three sets of essays:
-1. Human essays from the training corpus (ground truth: score should be near 0)
-2. Raw Qwen 0.5B mirror-prompted slop (ground truth: score should be near 1)
-3. Essays generated by TinyLlama under the best current hill-climbing prompts
+- **Question:** Does LoRA become much stronger when adapters cover both attention and MLP blocks instead of attention only?
+- **Backbone:** `TinyLlama/TinyLlama-1.1B-Chat-v1.0`
+- **Trainable parameters:** LoRA on attention plus MLP projections; base frozen
+- **Training data:** `P0 Base Pair Pack`
+- **Objective:** same SFT objective as `M1`
+- **Source notebooks:** `notebooks/defan_slop_gan_unsloth (1).ipynb`, `notebooks/ai_slop_prompt_rewriter_colab_v3 (1).ipynb`
+- **Why it matters:** This cleanly tests whether the bottleneck is adapter coverage rather than the choice between PEFT and full fine-tuning.
+- **Interesting if false:** If broader LoRA barely helps, then either the task is easy enough for cheap adapters or the model needs true weight updates to improve.
+- **Outputs:** checkpoint, adapter comparison plot versus `M1`, Pangram delta table
+- **Rough compute:** low to medium
 
-Run both `editlens_Llama-3.2-3B` and `editlens_roberta-large` for comparison. Also score the same essays with our local DistilBERT v2 classifier to measure correlation.
+### M3. Last-Block Unfreeze
 
-**Why:** We need to establish the baseline detectability of our current TinyLlama outputs, confirm that EditLens scores make intuitive sense on our data, and understand whether our local DistilBERT v2 classifier is a valid proxy for EditLens. If the two correlate strongly (r > 0.7), the earlier hill-climbing work was optimizing a useful signal. If they don't, we've learned something important about the inadequacy of our local classifier.
+- **Question:** Is it enough to fully train only the final quarter of transformer blocks and the LM head?
+- **Backbone:** `TinyLlama/TinyLlama-1.1B-Chat-v1.0`
+- **Trainable parameters:** last 25% of transformer layers, final norms, and LM head; earlier blocks frozen
+- **Training data:** `P0 Base Pair Pack`
+- **Objective:** SFT
+- **Source notebooks:** `notebooks/ai_slop_prompt_rewriter_colab_v3 (1).ipynb`, `notebooks/Hill_Climb_notebooks/slop_pipeline_colab.ipynb`
+- **Why it matters:** This is the cleanest middle ground between LoRA and full fine-tuning.
+- **Interesting if false:** If this underperforms LoRA, then broad low-rank adaptation may be more stable than partial full-weight updates.
+- **Outputs:** checkpoint, layer-unfreeze ablation summary, Pangram and similarity metrics
+- **Rough compute:** medium
 
-**Implementation:**
-```python
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
-import torch
+### M4. Full-Model Fine-Tune
 
-model = AutoModelForSequenceClassification.from_pretrained("pangram/editlens_Llama-3.2-3B")
-tokenizer = AutoTokenizer.from_pretrained("pangram/editlens_Llama-3.2-3B")
+- **Question:** What is the same-backbone performance ceiling if we train all TinyLlama weights on the rewrite task?
+- **Backbone:** `TinyLlama/TinyLlama-1.1B-Chat-v1.0`
+- **Trainable parameters:** all model weights
+- **Training data:** `P0 Base Pair Pack`
+- **Objective:** SFT
+- **Source notebooks:** `notebooks/ai_slop_prompt_rewriter_colab_v3 (1).ipynb`, `notebooks/defan_slop_gan_unsloth (1).ipynb`
+- **Why it matters:** This gives the reference ceiling for the primary backbone and tells us whether PEFT is leaving real performance on the table.
+- **Interesting if false:** If full fine-tuning does not beat `M2` or `M3`, that is a strong practical result because it says full unfreezing is not worth the cost or instability.
+- **Outputs:** full checkpoint, overfitting curves, direct comparison to `M1-M3`
+- **Rough compute:** high
 
-def editlens_score(text):
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=1024)
-    with torch.no_grad():
-        logits = model(**inputs).logits
-    return logits.squeeze().item()   # raw regression output; check paper for normalization
-```
+### M5. Curriculum LoRA
 
-**Outputs:**
-- Score distributions (histogram) for each of the three essay groups
-- Correlation matrix: EditLens-3B vs EditLens-RoBERTa vs DistilBERT v2
-- 5 specific examples at EditLens score extremes — what does score 0.1 look like vs score 0.9?
+- **Question:** Does training order matter if we present easy rewrites before hard ones?
+- **Backbone:** `TinyLlama/TinyLlama-1.1B-Chat-v1.0`
+- **Trainable parameters:** same adapter scope as `M2`
+- **Training data:** `P1 Curriculum Pack`
+- **Objective:** SFT
+- **Source notebooks:** `notebooks/stat4830_token_slop_classifier_v2_(1) (1).ipynb`, `notebooks/build_mirror_dataset (2).ipynb`, `notebooks/ai_slop_prompt_rewriter_colab_v3 (1).ipynb`
+- **Why it matters:** The repo already leans on curriculum ideas for classification. This asks whether the same training-order logic helps generation-side deslopification.
+- **Interesting if false:** If curriculum does nothing, the project learns that rewrite quality depends more on data type and objective than easy-to-hard scheduling.
+- **Outputs:** checkpoint, per-stage curves, easy/medium/hard validation breakdown
+- **Rough compute:** medium
 
-**What we learn:** The gap between current outputs and "human-like" on EditLens's continuous scale. Whether our earlier work was on the right track. Which model (3B vs RoBERTa) to use as the primary reward (likely 3B for quality, RoBERTa for fast ablation).
+### M6. Hard-Negative LoRA
 
-**Success criteria:** Human essays score clearly below 0.3; raw Qwen slop scores above 0.7. If not, something is wrong with how we're running inference and we need to debug before proceeding.
+- **Question:** Is it better to spend training budget on the hardest, most obviously AI-looking or most failure-prone examples?
+- **Backbone:** `TinyLlama/TinyLlama-1.1B-Chat-v1.0`
+- **Trainable parameters:** same adapter scope as `M2`
+- **Training data:** `P2 Hard Pack`
+- **Objective:** SFT
+- **Source notebooks:** `notebooks/stat4830_token_slop_classifier_v2_(1) (1).ipynb`, `notebooks/build_mirror_dataset (2).ipynb`, `notebooks/Hill_Climb_notebooks/slop_pipeline_colab.ipynb`
+- **Why it matters:** This connects the Pangram hard-example intuition to the generator side of the project.
+- **Interesting if false:** If the hard pack underperforms the base pair pack, then hard-negative mining may be more useful for detectors than for rewrite models.
+- **Outputs:** checkpoint, hard-vs-uniform data comparison, failure-case gallery
+- **Rough compute:** medium
 
-**Estimated time:** ~2 hours including model download and inference on ~300 essays. Zero cost.
+### M7. Preference-Tuned Model (DPO)
 
----
+- **Question:** Is pairwise preference tuning on Pangram-ranked candidate rewrites better aligned than plain SFT?
+- **Backbone:** `TinyLlama/TinyLlama-1.1B-Chat-v1.0`
+- **Trainable parameters:** same adapter scope as `M2`
+- **Training data:** `P3 Preference Pack`
+- **Objective:** DPO on best-vs-worst rewrite pairs, where ranking is induced by Pangram delta subject to similarity thresholds
+- **Source notebooks:** `notebooks/ai_slop_prompt_rewriter_colab_v3 (1).ipynb`, `notebooks/build_mirror_dataset (2).ipynb`, `notebooks/Hill_Climb_notebooks/slop_pipeline_colab.ipynb`
+- **Why it matters:** This is the strongest offline alignment experiment because it uses Pangram directly without the instability of online RL.
+- **Interesting if false:** If DPO cannot beat SFT, then Pangram-induced preference pairs may be too noisy or too shallow for ranking-based optimization.
+- **Outputs:** checkpoint, preference-pair bank, DPO-vs-SFT comparison on the same validation set
+- **Rough compute:** medium
 
-### Experiment A2: Fluency Reward Signal Implementation and Validation
+### M8. Direct Pangram-Reward RL (GRPO)
 
-**What:** Implement the log-probability fluency reward using frozen `meta-llama/Llama-3.2-3B` (the base model, before EditLens fine-tuning) as the reference:
+- **Question:** Does online reward optimization with Pangram actually outperform the best offline method?
+- **Backbone:** `TinyLlama/TinyLlama-1.1B-Chat-v1.0`
+- **Trainable parameters:** start from the best checkpoint among `M2`, `M5`, and `M7`; train with GRPO
+- **Training data:** same canonical source inputs, but rewards are computed online from sampled rewrites
+- **Objective:** maximize Pangram delta with KL, fluency, and length penalties
+- **Source notebooks:** `notebooks/defan_slop_gan_unsloth (1).ipynb`, `notebooks/Hill_Climb_notebooks/slop_pipeline_colab.ipynb`
+- **Why it matters:** This is the most direct optimization experiment in the entire tournament because the training signal is the actual Pangram reward.
+- **Interesting if false:** If GRPO underperforms DPO or SFT, that is still a strong result because it shows that online reward optimization is too noisy or too hackable for this task.
+- **Outputs:** checkpoint, reward curves, KL drift plot, RL-vs-offline comparison
+- **Rough compute:** high
 
-```
-R_fluency(essay) = (1/T) * Σ_t log P_frozen(token_t | token_1..t-1)
-```
+### M9. Hill-Climb Distilled Model
 
-This is the mean log-likelihood of the essay under the frozen base model — a proxy for how "natural" the text is from a language modeling perspective.
+- **Question:** Can search-time improvements from hill climbing be compressed into a standalone rewrite model?
+- **Backbone:** `TinyLlama/TinyLlama-1.1B-Chat-v1.0`
+- **Trainable parameters:** same adapter scope as `M2`
+- **Training data:** `P4 Hill Pack`
+- **Objective:** SFT on targets produced by hill-climbed prompt outputs that beat the frozen baseline under Pangram
+- **Source notebooks:** `notebooks/Hill_Climb_notebooks/slop_pipeline_colab.ipynb`, `notebooks/Hill_Climb_notebooks/slop_prelim_experiment (2).ipynb`, `notebooks/ai_slop_prompt_rewriter_colab_v3 (1).ipynb`
+- **Why it matters:** This is the cleanest bridge between the existing hill-climbing work and the new fine-tuning tournament.
+- **Interesting if false:** If distillation fails, then hill-climbing gains may be prompt-local search artifacts that do not compress well into weights.
+- **Outputs:** checkpoint, hill-distillation dataset, comparison to B1 hill-climbed prompt baseline
+- **Rough compute:** medium
 
-**Why this reference model:** Using `meta-llama/Llama-3.2-3B` (base, not EditLens fine-tuned) provides clean separation between the two reward components. The EditLens-fine-tuned version has been trained specifically to recognize AI writing patterns; using it for fluency would create a partially circular dependency. The plain base model is an unbiased language model that simply measures how likely the text is under a general prior.
+### M10. QLoRA Scale Wildcard
 
-**Key design decision to validate:** Should R_fluency use the same architecture as the deslopifier policy (so it measures "how far have you drifted from your starting distribution") or a different model (so it measures "does this sound like natural text in general")? These are subtly different:
-- Same architecture → KL-like constraint; prevents reward hacking by staying close to home
-- Different architecture → Penalizes incoherence more broadly
-
-Run a quick comparison on the existing corpus using both framings to see which better captures human essay quality. Document the choice and proceed with one.
-
-**Outputs:**
-- R_fluency scores for the same 300-essay corpus as A1
-- Pearson and Spearman correlation: R_fluency vs EditLens score
-- Scatter plot: EditLens score (x-axis) vs R_fluency (y-axis) with point labels (human / slop / hill-climb)
-
-**What we learn:** Whether fluency and detection evasion are aligned, orthogonal, or in tension. If human essays have both low EditLens scores AND high log-prob fluency — great, both signals point the same direction. If there are essays with low EditLens score but low fluency (e.g., repetitive memorized text), the fluency term is doing real work.
-
-**Success criteria:** Human essays cluster in the high-fluency / low-EditLens quadrant. Raw slop clusters in the low-fluency / high-EditLens quadrant. Hill-climb outputs are somewhere in between.
-
----
-
-### Experiment A3: Combined Reward Formula and Normalization
-
-**What:** Define and lock in the combined reward function for all RL experiments:
-
-```
-R(essay) = α · (1 - EditLens(essay)) + β · R_fluency_normalized(essay) + γ · R_length(essay)
-```
-
-Where:
-- `EditLens(essay)` ∈ [0,1]: 0 = human, 1 = fully AI
-- `R_fluency_normalized`: mean log-prob, z-score normalized across the training batch so it has comparable magnitude to the EditLens term
-- `R_length`: small penalty for outputs significantly shorter or longer than the input (|output_length - input_length| / input_length), ensures the model doesn't truncate its way to a lower score
-
-Starting values: α=1.0, β=0.5, γ=0.1. The ablation of α and β is Experiment C5.
-
-**Important normalization question:** EditLens returns a raw regression logit. Confirm the output range and whether sigmoid normalization is needed to put it in [0,1]. Check the EditLens source code / paper for the correct post-processing. If the model outputs an already-calibrated [0,1] probability (likely for the classification head), use it directly. If it outputs a raw logit, apply sigmoid.
-
-**Outputs:** A fixed reward function formula, documented with: the normalization approach, the choice of α/β/γ starting values, and the justification for each. This is a design document, not an experiment per se — but it must be made explicit before any training code is written.
-
----
-
-## 5. Group B — Classifier Hardening via EditLens Dataset
-
-**Purpose:** The local DistilBERT v2 classifier, trained on Qwen mirror-prompted slop, likely has poor OOD generalization. The EditLens dataset (60k examples, 4 domains, GPT-4.1/Claude/Gemini generated) gives us a path to a much stronger classifier. This group is less critical for RL training (which will use EditLens directly as the reward) but is valuable for: fast reward proxying during debugging, understanding what our own approach learned, and ablation experiments where calling a 3B model is too slow.
-
----
-
-### Experiment B1: OOD Evaluation of v2 DistilBERT Classifier
-
-**What:** Evaluate the v2 classifier on essays it has never seen:
-- 50 essays generated by GPT-4.1 (used to create the EditLens training data)
-- 50 essays generated by Claude Sonnet 4 (same)
-- 50 essays generated by Llama 3.1 8B (different architecture from Qwen)
-- 50 essays from the EditLens test set (direct comparison to a held-out benchmark)
-
-Compare AUC of our v2 classifier vs `editlens_roberta-large` on the same essays. This quantifies the gap between our homemade classifier and the production-quality one.
-
-**Outputs:** Side-by-side AUC comparison table. Qualitative examples of essays that fool v2 but not EditLens-RoBERTa.
-
-**What we learn:** How much better EditLens is than our approach. This motivates either (a) using EditLens as the reward directly (which we're already doing) or (b) fine-tuning our classifier on the EditLens dataset (B2), or both.
-
----
-
-### Experiment B2: Fine-Tuning DistilBERT on the EditLens Dataset
-
-**What:** Instead of the Pangram Algorithm 1 hard negative mining loop (scaffolded in the v2 notebook but computationally expensive to execute from scratch), use the released `pangram/editlens_iclr` dataset directly to fine-tune our DistilBERT v2 classifier.
-
-Specifically: take the EditLens training split (60k examples), convert the continuous EditLens scores to binary labels (score < 0.3 → human, score > 0.7 → AI; discard the AI-edited middle), and fine-tune our existing v2 classifier on this much larger and more diverse dataset.
-
-**Why this matters:** Our current training data is ~1,000 human essays + ~1,000 Qwen-mirror essays. The EditLens dataset is 60× larger, covers 4 domains, and uses GPT-4.1/Claude/Gemini generated text rather than Qwen 0.5B. The resulting classifier will generalize far better and serve as a fast, accurate proxy reward for ablation experiments.
-
-**Implementation note:** The EditLens dataset uses human text from: CNN/DailyMail (news), WritingPrompts (creative), Amazon/Google reviews, FineWeb (education). Our current training data uses different sources. This diversity is precisely what makes it valuable.
-
-**Outputs:**
-- v2-on-EditLens-data AUC vs v2-on-original-data AUC (on the EditLens test split)
-- Speed comparison: inference time per essay for fine-tuned DistilBERT vs `editlens_roberta-large` vs `editlens_Llama-3.2-3B`
-
-**Success criteria:** Fine-tuned DistilBERT closes at least 50% of the AUC gap between v2-original and `editlens_roberta-large`. This makes it a viable fast proxy for debugging and cheap ablations.
-
-**Compute:** ~2 hours on T4 Colab. No cost (using released dataset).
+- **Question:** If we keep the data and objective fixed but scale the backbone, does a bigger model beat clever fine-tuning on TinyLlama?
+- **Backbone:** `Qwen/Qwen2.5-1.5B-Instruct`
+- **Trainable parameters:** 4-bit QLoRA using Unsloth-style training
+- **Training data:** `P0 Base Pair Pack`
+- **Objective:** SFT
+- **Source notebooks:** `notebooks/defan_slop_gan_unsloth (1).ipynb`, `notebooks/build_mirror_dataset (2).ipynb`
+- **Why it matters:** This gives the tournament one explicit scale wildcard. If it wins, scale matters. If it loses, training strategy matters more than naive parameter count.
+- **Interesting if false:** A loss here would be very interesting because it would show that smaller, better-adapted models can beat a larger backbone under the same Pangram judge.
+- **Outputs:** checkpoint, scale-vs-technique comparison, memory/runtime summary
+- **Rough compute:** medium to high
 
 ---
 
-### Experiment B3: EditLens Ternary Classification as Training Signal (Optional / Stretch)
+## 6. Tournament Flow
 
-**What:** Rather than binarizing the EditLens labels, train a three-class version of our classifier: human (score < 0.3) / AI-edited (0.3–0.7) / fully AI (> 0.7). Use the full EditLens training set including the AI-edited examples.
+Run the tournament in stages so compute is spent where it matters.
 
-**Why:** If the deslopifier is succeeding, it should produce outputs that score in the "AI-edited" range, not jump directly to "human." A three-class classifier can track this intermediate progress and provide a more informative reward signal than binary "crossed the threshold / didn't." This mirrors the EditLens ternary evaluation setup exactly.
+### Stage 1: Parameter Bracket
 
-**Dependency:** This is only worth running if C2 (RL training) shows that outputs are reaching the AI-edited zone. Can be deferred until after the first RL results come in.
+Train and compare:
 
----
+- `M1`
+- `M2`
+- `M3`
+- `M4`
 
-## 6. Group C — RL Training Loop
+Goal: determine whether LoRA, partial unfreezing, or full fine-tuning is the best basic update rule.
 
-**Purpose:** Train the deslopifier using RL with the EditLens + fluency reward. This is the core of the project. The professor's direction: use REINFORCE from class, with the combined reward as the verifier, on an H100 via Prime Intellect.
+### Stage 2: Data Bracket
 
-### The Setup (applies to all Group C experiments)
+Using the best parameterization from Stage 1, train:
 
-```
-Policy:   π_θ(e' | e)     — deslopifier: rewrites essay e into e'
-Reward:   R(e') = α · (1 - EditLens_3B(e')) + β · log P_Llama3.2-3B_frozen(e')
-Update:   REINFORCE or GRPO gradient step on π_θ
-```
+- `M5`
+- `M6`
 
-The policy is initialized from an instruction-tuned LM with LoRA applied. The base model choice (Qwen 1.5B vs Llama 3.2 3B) is decided in C1. The EditLens scoring model (`pangram/editlens_Llama-3.2-3B`) is frozen throughout. The fluency reference (`meta-llama/Llama-3.2-3B` base, no fine-tuning) is frozen throughout.
+Goal: determine whether curriculum or hard-example emphasis beats the plain data mix.
 
-**Training prompt format:**
-```
-System: You are an expert writing editor. Rewrite the following essay to sound
-more like natural human writing. Make targeted, light-touch edits. Preserve
-the core content, meaning, and length.
-User: [input essay — AI-generated slop]
-Assistant: [rewritten essay]
-```
+### Stage 3: Objective Bracket
 
-**Standard evaluation protocol (used for all C experiments):**
-Every 50 steps, score 50 held-out essays on: EditLens-3B mean score, EditLens-RoBERTa mean score, R_fluency mean score, and ternary class distribution (what fraction of essays have moved to AI-edited or human range).
+Train:
 
----
+- `M7`
+- `M8`
 
-### Experiment C1: Minimum Working Loop — Smoke Test
+Goal: compare offline preference tuning against direct Pangram-reward optimization.
 
-**What:** Before any real training, establish that the full pipeline runs end-to-end without errors. Use the smallest possible model (Qwen 0.5B or TinyLlama 1.1B), 5 training prompts, 10 RL steps. Verify:
-- Policy generates a valid essay
-- `editlens_Llama-3.2-3B` scores it and returns a non-NaN float in [0,1]
-- Fluency log-probs are computed
-- Combined reward is non-NaN
-- REINFORCE gradient is non-zero
-- Parameters update
+### Stage 4: Search Compression and Scale Wildcards
 
-**Why this comes first:** RL training loops have many subtle failure modes — mismatched tokenizers, NaN in log-prob computation for empty outputs, EditLens returning logits instead of probabilities, gradient explosion on first step. A 10-step smoke test on the smallest possible model surfaces all infrastructure bugs before H100 time is spent.
+Train:
 
-**Outputs:** "Pipeline runs / doesn't run" plus the 10-step reward trajectory. If the reward increases at all in 10 steps — even slightly — that's a useful signal.
+- `M9`
+- `M10`
 
-**Failure modes to check:**
-- EditLens score is exactly 0 or 1 for all outputs → check if EditLens output needs sigmoid normalization
-- Reward is NaN → check for empty outputs (add minimum length filter), check log-prob computation for padding tokens
-- Gradient is exactly 0 → check that LoRA layers are properly set to `requires_grad=True`
-- Loss increases monotonically → check reward sign convention (higher reward should reduce loss)
+Goal: test the two most interesting ways to beat the main bracket: distill search, or scale the model.
+
+### Stage 5: Finals
+
+Send the top 4 qualifying models to a blind held-out evaluation:
+
+- same test inputs
+- same deterministic decoding
+- official Pangram 3B judge
+- same qualification gates
+
+The best final-score model is the tournament winner.
 
 ---
 
-### Experiment C2: REINFORCE Training — Primary Experiment
+## 7. Intended Reporting Story
 
-**What:** The main RL experiment. Train on the best-fitting model size (see memory budget below) for 500 steps using REINFORCE.
+The final report should be able to say something this concrete:
 
-**Memory budget analysis (do this before C2, on H100):**
+> We ran a controlled tournament of transformer deslopifiers. All models used the same Pangram reward, the same held-out evaluation set, and nearly the same source pool. The winner was the model that reduced Pangram score the most while preserving meaning.
 
-| Model | Params | LoRA (r=16) VRAM | 16 rollouts × 512 tokens | Total estimate |
-|---|---|---|---|---|
-| Qwen 1.5B Instruct | 1.8B | ~4 GB | ~16 GB activations | ~20 GB ✅ |
-| Llama 3.2 3B Instruct | 3B | ~7 GB | ~24 GB activations | ~31 GB ✅ |
-| Qwen 7B Instruct | 7B | ~15 GB | ~48 GB activations | ~63 GB ✅ (tight, use grad ckpt) |
+That is much stronger than a vague collection of unrelated experiments.
 
-Recommendation: start C2 with **Llama 3.2 3B Instruct** — it shares the architecture family with the EditLens reward model and the fluency reference, making the whole system architecturally coherent. If memory is tight, fall back to Qwen 1.5B. Document the choice.
+This setup also gives several meaningful failure stories:
 
-**Hyperparameters:**
-- LoRA: r=16, α=32, targets: q/k/v/o projection layers
-- Optimizer: AdamW, lr=1e-5, weight decay=0.01
-- Batch size: 16 rollouts per step
-- KL penalty: λ_KL=0.1 (see C4 for ablation)
-- Reward: α=1.0, β=0.5, γ=0.1 (from A3)
-- Max input length: 512 tokens; max output length: 512 tokens
-- Minimum output length filter: reject rollouts < 50 tokens (prevents truncation reward hacking)
-- Steps: 500; eval every 50 steps
+- LoRA may beat full fine-tuning
+- curriculum may not help generation even if it helps classification
+- DPO may beat RL
+- hill climbing may produce gains that are hard to distill
+- a larger wildcard model may still lose to a smaller but better-adapted one
 
-**Training data:** Essays from the EditLens training split, filtered to score > 0.7 (fully AI-generated inputs, so the deslopifier has something real to work with). This is a significant upgrade over our current corpus — 60k examples of GPT-4.1/Claude/Gemini generated text vs our ~1k Qwen essays. Use the creative writing and news domains primarily (most similar to the essay task).
-
-**Outputs (per eval checkpoint):**
-- Mean EditLens-3B score on 50 held-out essays (primary metric; should decrease)
-- Mean EditLens-RoBERTa score (secondary; should also decrease)
-- Mean R_fluency score (should stay roughly flat or increase; if it drops sharply, fluency is degrading)
-- KL divergence from reference model
-- Ternary class distribution: (% fully AI, % AI-edited, % human) — track movement across the spectrum
-- 5 qualitative examples: input slop vs output at checkpoint
-
-**What we learn:** Does RL training with EditLens as the reward actually reduce the detection score? Does the fluency constraint work? What does the model learn to change? Are there signs of reward hacking?
-
-**Success criteria:** EditLens-3B score on eval set drops by ≥ 10 absolute points (e.g., 0.82 → 0.72) by step 500. Fluency score does not drop by more than 1 standard deviation from its initial value. At least some essays move into the AI-edited range (score < 0.7).
-
-**Key failure modes:**
-- Score barely moves → gradient signal too weak; try increasing batch size to 32 or switching to GRPO (C3)
-- Score drops but outputs become incoherent → reduce β ratio or increase KL penalty
-- Score drops to near 0 in 50 steps → reward hacking (model found a shortcut, e.g., very short outputs or text that tricks EditLens); add minimum-length constraint and check outputs qualitatively
-- KL divergence explodes → reduce learning rate or increase KL penalty
+Any of those outcomes would still be interesting.
 
 ---
 
-### Experiment C3: GRPO vs REINFORCE
+## 8. Priority and Time Discipline
 
-**What:** Run the identical setup as C2 but using GRPO (Group Relative Policy Optimization) instead of vanilla REINFORCE.
+If time gets tight, keep the tournament spine intact and cut from the edges.
 
-GRPO generates K=8 outputs per input prompt, computes their rewards, normalizes within the group (subtracting group mean, dividing by group std), and uses the normalized rewards as advantages. This eliminates the need for a learned value function while dramatically reducing gradient variance compared to REINFORCE.
+### Must run
 
-**Why GRPO is worth trying:** REINFORCE with a batch of 16 rollouts uses all 16 as independent samples for one gradient estimate. GRPO with K=8 groups of 2 prompts uses within-group comparison to get a lower-variance advantage estimate. Since our reward is non-trivial (requires running both EditLens and the fluency model), lower variance per reward call is efficient.
+- `M1`
+- `M2`
+- `M3`
+- `M7`
+- `M8`
+- `M9`
 
-**Compute note:** GRPO with K=8 uses 8 × more generator calls per input prompt than REINFORCE. However, since EditLens runs locally and is fast (especially RoBERTa-large at 355M), the overhead is mostly in the policy forward pass, not the reward evaluation.
+This set is enough to tell the core story: basic PEFT comparison, partial unfreezing comparison, preference vs RL, and hill-climb distillation.
 
-**Outputs:** Reward curve (C2 REINFORCE vs C3 GRPO on the same axes). Gradient variance estimate per step. Convergence speed comparison. Time per training step.
+### Nice to run
 
-**What we learn:** Is GRPO's variance reduction worth the compute overhead for this task? If GRPO converges 2× faster in steps but takes 1.5× longer per step, it's a net win. If it converges in the same number of steps as REINFORCE, stick with REINFORCE for simplicity.
+- `M4`
+- `M5`
+- `M6`
 
----
+These deepen the story but are not required for the tournament to make sense.
 
-### Experiment C4: KL Penalty Ablation
+### Wildcard
 
-**What:** Using the better algorithm from C2/C3, run three conditions varying the KL penalty coefficient:
+- `M10`
 
-| Run | λ_KL | Expected behavior |
-|---|---|---|
-| C4-a | 0.0 | No KL constraint — policy may drift far or reward-hack |
-| C4-b | 0.1 | Default from C2 — moderate constraint |
-| C4-c | 0.5 | Strong constraint — policy stays close to init |
-
-**Why:** The KL penalty is the primary guard against reward hacking and fluency collapse. Too low → the policy collapses to generating gibberish that tricks EditLens. Too high → the policy barely moves and the EditLens score doesn't improve. Finding the right balance is essential and cannot be predicted a priori.
-
-**Outputs:** 3-way comparison of (EditLens score, fluency score, KL divergence) at training end. This produces a **Pareto frontier** — the clearest result for the final presentation.
-
-```
-Fluency (R_fluency)
-     |
-  ●  |         ← λ_KL=0.5 (high fluency, high EditLens = less improvement)
-     |    ●    ← λ_KL=0.1 (balanced)
-     |       ● ← λ_KL=0.0 (best EditLens, possible fluency collapse)
-     └─────────────────────
-              EditLens score (lower = better)
-```
-
-**What we learn:** The explicit trade-off curve between detection evasion and fluency preservation. Presenting this curve at the final presentation is much stronger than a single operating point — it shows the system's behavior and lets the audience reason about where to sit on the curve.
+This is valuable if compute allows, but the tournament is still coherent without it.
 
 ---
 
-### Experiment C5: Reward Weight Ablation (α vs β)
+## 9. Source Notebook Mapping
 
-**What:** Fix the best (algorithm, KL) from C2/C3/C4. Vary the balance between the EditLens reward and the fluency reward:
+This revision is still grounded in the current repo.
 
-| Run | α (EditLens weight) | β (fluency weight) | Hypothesis |
-|---|---|---|---|
-| C5-a | 1.0 | 0.0 | EditLens-only; will reward-hack quickly |
-| C5-b | 1.0 | 0.5 | Balanced (default from A3) |
-| C5-c | 1.0 | 1.0 | Strong fluency constraint |
-| C5-d | 0.0 | 1.0 | Fluency-only; won't reduce EditLens score |
+- **Prompt rewriting / text-to-text supervision:** `notebooks/ai_slop_prompt_rewriter_colab_v3 (1).ipynb`
+- **Mirror data construction:** `notebooks/build_mirror_dataset (2).ipynb`
+- **Unsloth / QLoRA training patterns:** `notebooks/defan_slop_gan_unsloth (1).ipynb`
+- **Hill climbing and reward-driven prompt search:** `notebooks/Hill_Climb_notebooks/slop_pipeline_colab.ipynb`
+- **Token-level curriculum and hard-example intuition:** `notebooks/stat4830_token_slop_classifier_v2_(1) (1).ipynb`
+- **Essay verifier and human-vs-slop assets:** `notebooks/STAT4830_KaggleEssays_Verifier.ipynb`
 
-**Why:** The professor specifically called out the combination of Pangram + fluency reward. This ablation tests what each component contributes and quantifies the importance of the fluency term.
-
-**Expected result:** C5-a reward-hacks (low EditLens score, incoherent text). C5-d doesn't move EditLens. C5-b or C5-c is the sweet spot. The gap between C5-a and C5-b quantifies how much work the fluency term does as a regularizer.
-
-**Outputs:** 4-way comparison of (EditLens score, fluency score) at training end. Qualitative examples from each condition showing the different failure modes.
-
----
-
-## 7. Group D — Architecture & Model Size
-
-**Purpose:** Test whether model size changes the deslopifier's effectiveness, and whether the rewriter architecture is optimal.
-
----
-
-### Experiment D1: Model Size Sweep
-
-**What:** Train the deslopifier (best config from Group C) at three sizes:
-
-| Size | Model | LoRA VRAM | Notes |
-|---|---|---|---|
-| Small | TinyLlama 1.1B or Qwen 0.5B | ~3 GB | Sanity check |
-| Medium | Llama 3.2 3B Instruct | ~7 GB | **Primary (C2 model)** |
-| Large | Llama 3.1 8B Instruct or Qwen 7B | ~15 GB + grad ckpt | H100 required |
-
-**Why:** The prof noted "reward signal being bigger is more interesting." A larger policy may make more subtle, human-like edits that genuinely fool EditLens rather than making superficial changes. But larger models are also harder to train with RL and take longer per step.
-
-**Fair comparison:** Same number of RL steps (500), same reward, same hyperparameters where possible. The only variable is model size.
-
-**Outputs:** EditLens score reduction vs model size curve. Fluency score vs model size. Wall-clock time per step vs model size. Qualitative comparison: do larger models make more nuanced edits?
-
-**H100 fit check for 8B:** 15 GB (model) + ~50 GB (activations for 16 rollouts × 512 tokens) = ~65 GB. Fits on 80 GB H100 with gradient checkpointing. Use `torch.utils.checkpoint` for the policy forward pass during rollout generation.
-
----
-
-### Experiment D2: Rewriter vs Generator Architecture
-
-**What:** Compare two deslopifier designs:
-
-**(A) Rewriter (default, used in C2–C5):** Takes the original AI essay as input and produces an edited version. The model sees the source text and must make targeted improvements.
-
-**(B) Generator:** Takes only the essay topic/prompt and generates a new essay from scratch, conditioned only on the topic. No source text provided.
-
-**Why this matters:** The Grammarly dataset insight from EditLens is relevant here. Small, targeted edits ("Fix any mistakes" → score near 0) fool EditLens far better than large additive rewrites ("Make it more detailed" → score ~0.5). A rewriter is naturally biased toward targeted edits (it has the source to anchor to). A generator must learn human-like writing from scratch, which is harder but potentially more powerful. The RL training signal is the same in both cases.
-
-**Outputs:** (EditLens score, fluency score, edit distance to source) comparison for rewriter vs generator. Token-level diff analysis: what percentage of tokens are changed in each approach?
-
-**What we learn:** Is the rewriter's constraint (must stay close to the source) a feature (gives it an anchor) or a bug (limits how much it can change)? This directly informs how future work should design deslopifiers.
-
----
-
-## 8. Group E — Evaluation & Analysis
-
-**Purpose:** Rigorously evaluate the best deslopifier from Groups C and D. These experiments produce the results for the final presentation.
-
----
-
-### Experiment E1: Multi-Detector Robustness
-
-**What:** Take the best deslopifier's outputs (100 essays from the eval set) and score them with multiple AI detectors:
-
-| Detector | Type | Notes |
-|---|---|---|
-| `editlens_Llama-3.2-3B` | Training reward (local) | Expected to improve — by construction |
-| `editlens_roberta-large` | Lighter EditLens variant (local) | Should also improve if signal generalizes within EditLens family |
-| GPTZero | External commercial | True generalization test |
-| Binoculars / Fast-DetectGPT | Statistical, no training | Measure if model has learned distributional shift |
-
-Also evaluate: do the inputs (pre-deslopification) and outputs (post-deslopification) differ significantly on the two statistical detectors (Binoculars / Fast-DetectGPT)? These measure perplexity ratios, not learned classifiers — transfer to them means the deslopifier changed the text's statistical properties, not just its surface EditLens score.
-
-**Outputs:** Table:
-
-| | EditLens-3B | EditLens-RoBERTa | GPTZero | Binoculars |
-|---|---|---|---|---|
-| Input (raw AI slop) | ? | ? | ? | ? |
-| Best deslopifier output | ? | ? | ? | ? |
-| ∆ (lower = better) | ? | ? | ? | ? |
-
-**Success criteria:** EditLens-3B improves (by construction). At least one external detector (GPTZero or Binoculars) also shows improvement. Transfer = evidence that the model has learned genuinely human-like stylistic signals, not EditLens-specific artifacts.
-
----
-
-### Experiment E2: Human Essay Preservation Test
-
-**What:** Pass the human essays (EditLens score ≈ 0) through the deslopifier and measure:
-- Does EditLens score increase, decrease, or stay flat?
-- How much does the text change (edit distance / token overlap)?
-- Does fluency degrade?
-
-**Why:** A well-calibrated deslopifier should be close to the identity function on already-human text. If it aggressively rewrites human essays and makes them *more* AI-sounding, it has learned a particular style rather than a genuine "humanization" signal.
-
-**Expected result:** Human essays should change very little (small edit distance) and their EditLens score should remain near 0. If the score increases after deslopification — the model is making human text sound more AI — that is a qualitatively interesting failure mode worth reporting.
-
-**Outputs:** EditLens score before vs after for human essays. Distribution of edit distances (token-level) for human essays vs AI essays. A few examples where the deslopifier made changes to a human essay and what it changed.
-
----
-
-### Experiment E3: Qualitative Analysis — What Did the Model Learn?
-
-**What:** Analyze 20 pairs of (input AI slop, deslopified output) in depth, specifically looking for:
-
-- **Hedging language removal:** "It is important to note that…" / "In conclusion…" / "Firstly…" / "Crucially…"
-- **Sentence length variation:** AI text tends toward uniform medium-length sentences. Did the deslopifier introduce short punchy sentences or longer compound ones?
-- **Specific detail addition:** AI often uses vague generalities. Did the model add concrete examples, names, dates?
-- **Vocabulary shift:** AI overuses words like "delve," "realm," "crucial," "tapestry," "nuanced," "multifaceted." Did the model replace these?
-- **Structural changes:** Did bullet-pointed sections become prose? Did headers disappear?
-- **Grammarly hypothesis validation:** Per the EditLens/Grammarly analysis, small targeted edits score near 0 and large rewrites score ~0.5. Does our deslopifier make mostly small edits (consistent with the optimal strategy) or large rewrites?
-
-**Method:**
-1. Token-level diff between input and output for each pair
-2. Use the DistilBERT v2 token heatmap (per-token P(human)) to see which tokens were most AI-flagged in the input and whether they were changed in the output
-3. Manual annotation with the above taxonomy
-
-**Outputs:** A table of annotated examples with edit type labels. A summary: what fraction of deslopifier edits fall into each category? This is the richest result for the final presentation — it tells a human story about what the model learned.
-
----
-
-### Experiment E4: Ablation Summary Table
-
-**What:** Compile a single clean table summarizing the key ablation results from Groups C and D:
-
-| Condition | EditLens-3B ↓ | Fluency | Notes |
-|---|---|---|---|
-| No RL (hill climbing only, old reward) | baseline | baseline | Pre-project |
-| No RL (EditLens scored retroactively) | ? | ? | Same outputs, new scorer |
-| REINFORCE, EditLens-only reward (C5-a) | ? | ? | Reward hacking condition |
-| REINFORCE, EditLens + fluency (C2) | ? | ? | **Primary result** |
-| GRPO, EditLens + fluency (C3) | ? | ? | Algorithm comparison |
-| Best × small model (D1) | ? | ? | Size effect |
-| Best × large model 8B (D1) | ? | ? | Size effect |
-| Best × generator architecture (D2) | ? | ? | Architecture effect |
-
-**Why:** This table *is* the story. It shows exactly what each component contributes and lets the audience understand the system with one glance.
-
----
-
-### Experiment E5: EditLens Ternary Progression *(New — enabled by Open Pangram)*
-
-**What:** Track the distribution of deslopifier outputs across the three EditLens categories (human / AI-edited / fully AI) over the course of RL training, at every eval checkpoint:
-
-```
-Step 0:    [█████████░░░░░░░░░░] 0% human, 5% AI-edited, 95% fully AI
-Step 100:  [████████░░░░░████░░] 0% human, 25% AI-edited, 75% fully AI
-Step 300:  [████░░░░░░░██████░░] 5% human, 45% AI-edited, 50% fully AI
-Step 500:  [███░░░░░░░████████░] 15% human, 60% AI-edited, 25% fully AI
-```
-
-**Why this is the best visualization for the presentation:** It shows the trajectory of learning, not just a single endpoint. Even if the deslopifier doesn't fully cross the "human" threshold in 500 steps, you can show that it is moving along the spectrum in the right direction. A result of "75% of essays moved from fully-AI to at least AI-edited" is compelling and honest.
-
-This experiment requires only running EditLens ternary inference at each checkpoint — essentially free since we're already evaluating every 50 steps. The thresholds for ternary classification come from the EditLens paper's calibration procedure (validate-set F1 maximization).
-
-**Outputs:** Stacked area chart of ternary class distribution over training steps. This should be Figure 1 of the final presentation.
-
----
-
-## 9. Implementation Order & Dependencies
-
-```
-A1 (EditLens baseline) 
-  └── A2 (fluency reward impl)
-        └── A3 (combined reward formula — design decision)
-              └── C1 (smoke test — infrastructure)
-                    ├── C2 (REINFORCE, 500 steps) ──────────────────────┐
-                    ├── C3 (GRPO comparison)                             │
-                    ├── C4 (KL ablation) ← depends on best of C2/C3     ├── E1–E5
-                    └── C5 (reward weight ablation)                      │
-                                                                         │
-B1 (OOD eval of v2 classifier) [parallel, any time after A1]           │
-  └── B2 (fine-tune on EditLens dataset)  ─────────────────────────────┘
-B3 (ternary classifier) [deferred — only if C2 shows AI-edited progress]
-
-D1 (model size sweep) ← depends on best config from C2/C3/C4
-D2 (rewriter vs generator) ← parallel with D1
-```
-
-**Critical path for the final presentation (minimum viable):**
-A1 → A2 → A3 → C1 → C2 → E5 (ternary progression) → E3 (qualitative analysis) → E4 (ablation table)
-
-Everything else is supporting evidence that strengthens the story. If time is short, C3 (GRPO) and D1 (model size) are the next most valuable.
-
----
-
-## 10. Revised Compute Budget
-
-With EditLens running locally, all API costs are eliminated. The revised budget is purely GPU hours.
-
-| Experiment | GPU | Estimated Time | API Cost |
-|---|---|---|---|
-| A1 (EditLens baseline, 300 essays) | T4 / local | 1–2 hrs | **$0** |
-| A2 (fluency reward, same corpus) | T4 | 1 hr | $0 |
-| B1 (OOD eval, 200 essays) | T4 | 1 hr | $0 |
-| B2 (fine-tune DistilBERT on EditLens data) | T4 Colab | 2–3 hrs | $0 |
-| C1 (smoke test, 10 steps) | H100 | 15 min | $0 |
-| C2 (REINFORCE, 500 steps, 16 rollouts) | H100 | 4–5 hrs | $0 |
-| C3 (GRPO, 500 steps) | H100 | 6–8 hrs | $0 |
-| C4 (KL ablation, 3 runs) | H100 | 10–12 hrs | $0 |
-| C5 (reward ablation, 4 runs) | H100 | 12–14 hrs | $0 |
-| D1 (model sweep, 3 sizes) | H100 | 10 hrs | $0 |
-| D2 (rewriter vs generator, 2 runs) | H100 | 6 hrs | $0 |
-| E1 (multi-detector eval, 100 essays) | T4 + external | 2 hrs | ~$5 GPTZero API |
-| E2–E5 (evaluation suite) | T4 | 3–4 hrs | $0 |
-
-**Total H100 estimate:** ~50–55 hours. **Total cost:** ~$5 (GPTZero for E1 only), vs ~$250 in the v1 spec.
-
-*Recommended order for H100 time:* C1 → C2 (confirm it works) → C4 (KL sweep) → C5 (reward sweep) → D1 large model. Run C3, D2 in parallel if multiple H100s are available.
-
----
-
-## 11. Open Questions Remaining
-
-The v1 spec had 7 open questions. The Open Pangram release resolved Q2 and Q3. Remaining:
-
-**Q1: Which model for the policy (deslopifier)?**
-Recommendation: **Llama 3.2 3B Instruct** as the primary, for architectural coherence with the EditLens reward model (same base). Confirm it fits on H100 with the planned batch size by running `torchinfo` before C1. If memory is too tight, fall back to Qwen 1.5B.
-
-**Q4: LoRA target modules.**
-Use q/k/v/o projections as the default (same as the EditLens QLoRA training). Consistent with best practices and matches what the reward model was trained with.
-
-**Q5: Input/output max length.**
-Set max_input_length=512, max_output_length=512. The EditLens Llama model supports 1024 tokens, so full essays fit. Truncate inputs longer than 512 tokens from the left (remove the beginning, keep the end — ending text tends to be more formulaic and easier for the deslopifier to improve).
-
-**Q6: Rollout strategy.**
-REINFORCE: K=1 rollout per input (use batch diversity from 16 different inputs). GRPO: K=8 rollouts per input. Evaluate if increasing K in REINFORCE from 1→4 improves convergence before committing to GRPO's overhead.
-
-**Q7: Reward hacking minimum length.**
-Add a filter: reject rollouts shorter than 50 tokens or less than 40% of the input length (prevents truncation hacking). Log the number of rejected rollouts per step — if it's > 10%, the minimum length constraint is too loose.
-
-**NEW Q8: EditLens inference normalization.**
-Before A3, confirm from the EditLens GitHub source code: does `editlens_Llama-3.2-3B` output a raw regression logit or a calibrated [0,1] probability? The paper says it returns a score from 0 to 1, but the model card is sparse. Check `pangramlabs/EditLens` source code for the inference forward pass. If it outputs a raw logit, apply sigmoid before using as reward. If the output range is calibrated [0,1], use directly.
-
----
-
-## 12. What the Final Presentation Should Show
-
-Based on running these experiments, the final presentation tells this story in order:
-
-1. **The problem.** AI-generated text is detectable. Here is EditLens's ternary spectrum (human / AI-edited / fully AI) and where raw AI slop sits on it. This is the opening.
-
-2. **The key insight from EditLens.** The goal is not to cross a binary threshold — it's to move along a continuous spectrum. Small targeted edits (like fixing grammar) score near-human. Large rewrites score in the AI-edited range. Our deslopifier should learn to make targeted, human-like edits.
-
-3. **Our approach.** REINFORCE / GRPO RL training of a Llama 3.2 3B policy with EditLens (continuous reward) + log-probability fluency (regularizer). Show the pipeline diagram.
-
-4. **The ternary progression (E5).** Show the stacked area chart of how outputs move across the human / AI-edited / AI spectrum over training. This is the main result and it's intuitive to any audience.
-
-5. **The ablation story (E4).** Each component's contribution. EditLens-only reward hacks. Fluency-only doesn't reduce detection. The combination works. Larger models do better.
-
-6. **The Pareto frontier (C4).** The KL penalty ablation produces a curve: trading off detection evasion vs fluency. Every application (student essays vs journalism vs creative writing) sits at a different point on this curve.
-
-7. **What the model learned (E3).** Before/after examples. The model removed hedging language, varied sentence length, replaced AI vocabulary. These are real stylistic changes, not noise injection.
-
-8. **Robustness (E1).** The deslopifier transfers to GPTZero and statistical detectors it was never trained against. This means it learned something general about human writing, not EditLens-specific artifacts.
-
-9. **Limitations.** We optimize against automated detectors, not human judgment. The model is bounded by the EditLens training distribution (GPT-4.1 / Claude / Gemini slop). License is non-commercial. Future work: RLHF from human judges; test on longer documents; adversarial training with updated detectors.
-
----
-
-## 13. References
-
-- Thai, K., Emi, B., Masrour, E., & Iyyer, M. (2025). EditLens: Quantifying the Extent of AI Editing in Text. *ICLR 2026*. arXiv:2510.03154.
-- Pangram Labs. (2026, March 24). Introducing Open Pangram. https://www.pangram.com/blog/introducing-open-pangram
-- `pangram/editlens_Llama-3.2-3B` and `pangram/editlens_roberta-large`. HuggingFace. CC BY-NC-SA 4.0.
-- `pangram/editlens_iclr` dataset. HuggingFace. CC BY-NC-SA 4.0.
-- pangramlabs/EditLens source code. GitHub.
-
----
-
-*Iteration checklist before converting to scripts:*
-*☐ After A1: confirm EditLens inference produces sensible [0,1] scores on our corpus*
-*☐ After A2: resolve fluency reference model choice (same-arch vs different-arch)*
-*☐ After A3: document exact reward formula and normalization in a config file*
-*☐ After C1 smoke test: confirm no NaN, gradients flow, parameters update*
-*☐ After C2 first 50 steps: check reward is moving; adjust KL/batch if not before full run*
+The important change is not the raw materials. It is the framing: these notebooks now feed one controlled tournament instead of a loose experiment list.
