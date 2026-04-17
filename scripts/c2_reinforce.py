@@ -73,6 +73,8 @@ GAMMA = 0.1
 
 SEED = 42
 
+_reward_ema: float | None = None   # running mean reward baseline (EMA, momentum=0.99)
+
 EVAL_INTERVAL       = 50
 EVAL_N_AI_GEN       = 50
 EVAL_N_AI_EDIT      = 50
@@ -572,6 +574,13 @@ def reinforce_step(
     optimizer.zero_grad()
     n_accepted = len(accepted_inputs)
 
+    global _reward_ema
+    if _reward_ema is None:
+        _reward_ema = mean_reward
+    else:
+        _reward_ema = 0.99 * _reward_ema + 0.01 * mean_reward
+    baseline = _reward_ema
+
     for (prompt_ids, gen_ids, p_len, _), reward in zip(accepted_inputs, rewards):
         prompt_ids = prompt_ids.to(device)
         gen_ids    = gen_ids.to(device)
@@ -585,7 +594,8 @@ def reinforce_step(
         per_tok_lp    = gen_log_probs.gather(1, gen_ids.unsqueeze(1)).squeeze(1)
         seq_lp        = per_tok_lp.mean()
 
-        loss = -seq_lp * reward / n_accepted
+        advantage = reward - baseline
+        loss = -seq_lp * advantage / n_accepted
         loss.backward()
 
         del full_ids, logits, log_probs_all, gen_log_probs, per_tok_lp, loss
