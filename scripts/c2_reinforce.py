@@ -73,8 +73,6 @@ GAMMA = 0.1
 
 SEED = 42
 
-_reward_ema: float | None = None   # running mean reward baseline (EMA, momentum=0.99)
-
 EVAL_INTERVAL       = 50
 EVAL_N_AI_GEN       = 50
 EVAL_N_AI_EDIT      = 50
@@ -565,6 +563,13 @@ def reinforce_step(
     ]
     mean_reward = sum(rewards) / len(rewards)
 
+    # Batch advantage normalization: zero-mean, unit-variance across the batch.
+    # This works from step 1 — no warmup required.
+    rewards_t  = torch.tensor(rewards, dtype=torch.float32)
+    adv_mean   = rewards_t.mean().item()
+    adv_std    = rewards_t.std().item() if n_accepted > 1 else 1.0
+    advantages = [(r - adv_mean) / (adv_std + 1e-8) for r in rewards]
+
     # ── Phase 3: recompute log-probs WITH grad (REINFORCE policy gradient) ─
     # Process one rollout at a time and call .backward() immediately to avoid
     # accumulating all activation tensors in VRAM simultaneously.
@@ -572,16 +577,8 @@ def reinforce_step(
     # equivalent to computing the mean and calling .backward() once.
     policy_mdl.train()
     optimizer.zero_grad()
-    n_accepted = len(accepted_inputs)
 
-    global _reward_ema
-    if _reward_ema is None:
-        _reward_ema = mean_reward
-    else:
-        _reward_ema = 0.99 * _reward_ema + 0.01 * mean_reward
-    baseline = _reward_ema
-
-    for (prompt_ids, gen_ids, p_len, _), reward in zip(accepted_inputs, rewards):
+    for (prompt_ids, gen_ids, p_len, _), advantage in zip(accepted_inputs, advantages):
         prompt_ids = prompt_ids.to(device)
         gen_ids    = gen_ids.to(device)
 
@@ -594,7 +591,6 @@ def reinforce_step(
         per_tok_lp    = gen_log_probs.gather(1, gen_ids.unsqueeze(1)).squeeze(1)
         seq_lp        = per_tok_lp.mean()
 
-        advantage = reward - baseline
         loss = -seq_lp * advantage / n_accepted
         loss.backward()
 
