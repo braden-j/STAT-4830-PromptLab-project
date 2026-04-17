@@ -1,0 +1,5 @@
+p0: tournament/data/packs/p0_pairs.jsonl
+model_name: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+out: tournament/data/packs/p3_preferences.jsonl
+manifest_out: tournament/data/packs/p3_manifest.json
+limit:

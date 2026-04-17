@@ -1,0 +1,12 @@
+train_size: 3000
+val_size: 500
+test_size: 500
+pangram_share: 0.80
+kaggle_share: 0.15
+defan_share: 0.05
+min_words: 80
+max_words: 260
+seed: 42
+kaggle_path: tournament/data/raw/kaggle/aeon_essays.csv
+defan_path: tournament/data/raw/defan/DefAn_public_combined.json
+output_path: tournament/data/source_pool.jsonl

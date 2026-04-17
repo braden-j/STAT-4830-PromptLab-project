@@ -1,0 +1,16 @@
+experiment_id: m5_curriculum
+model_name: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+training_mode: m5
+data_pack_path: tournament/data/packs/p1_curriculum.jsonl
+eval_path: tournament/data/source_pool.jsonl
+output_dir: tournament/outputs/runs/m5_curriculum
+max_seq_len: 768
+token_budget: 2000000
+batch_size: 2
+gradient_accumulation_steps: 8
+learning_rate: 0.0002
+num_epochs_max: 2
+seed: 42
+use_wandb: true
+wandb_entity: jgold23-university-of-pennsylvania-model-united-nations-
+wandb_project: PromptLab_STAT4830
