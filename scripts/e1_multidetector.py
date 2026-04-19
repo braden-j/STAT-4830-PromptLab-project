@@ -2,23 +2,21 @@
 scripts/e1_multidetector.py — Experiment E1: Multi-detector evaluation
 
 Load step_500 LoRA checkpoint and score 20 ai_generated essays with two detectors:
-  - EditLens (pangram/editlens_roberta-large)
-  - GPTZero  (/v2/predict/text, completely_generated_prob field)
+  - EditLens    (pangram/editlens_roberta-large): 0=human, 1=AI
+  - Binoculars  (binoculars-ai): lower score = AI-generated
 
 For each essay: generate a rewrite, then score both original and rewrite.
 Print a table and save results.
 
 Usage:
-    python scripts/e1_multidetector.py --gptzero-key <KEY>
+    python scripts/e1_multidetector.py
 """
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import sys
-import time
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -26,8 +24,8 @@ warnings.filterwarnings("ignore")
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(_REPO_ROOT, "scripts"))
 
-import requests
 import torch
+from binoculars import Binoculars
 from datasets import load_dataset
 from peft import PeftModel
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -39,12 +37,10 @@ CHECKPOINT_PATH = os.path.join(_REPO_ROOT, "outputs", "c2_checkpoints", "step_50
 RESULTS_PATH    = os.path.join(_REPO_ROOT, "outputs", "e1_multidetector.jsonl")
 SUMMARY_PATH    = os.path.join(_REPO_ROOT, "outputs", "e1_summary.txt")
 
-N_ESSAYS      = 20
+N_ESSAYS       = 20
 MAX_NEW_TOKENS = 512
 MIN_WORDS      = 80
 MAX_WORDS      = 250
-
-GPTZERO_URL = "https://api.gptzero.me/v2/predict/text"
 
 
 def get_device() -> torch.device:
@@ -109,36 +105,11 @@ def generate_rewrite(essay: str, tok, model, device: torch.device) -> str:
     return tok.decode(gen_ids, skip_special_tokens=True).strip()
 
 
-def gptzero_score(text: str, api_key: str, retries: int = 3) -> float | None:
-    """Call GPTZero /v2/predict/text and return completely_generated_prob."""
-    headers = {
-        "accept": "application/json",
-        "content-type": "application/json",
-        "x-api-key": api_key,
-    }
-    payload = {"document": text}
-    for attempt in range(retries):
-        try:
-            resp = requests.post(GPTZERO_URL, headers=headers, json=payload, timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
-            return float(data["documents"][0]["completely_generated_prob"])
-        except Exception as e:
-            wait = 2 ** attempt
-            print(f"  [gptzero] attempt {attempt+1} failed: {e} — retrying in {wait}s", flush=True)
-            time.sleep(wait)
-    return None
-
-
-def fmt_or_na(val: float | None, decimals: int = 4) -> str:
-    return f"{val:.{decimals}f}" if val is not None else "N/A"
+def mean(vals: list[float]) -> float:
+    return sum(vals) / len(vals) if vals else float("nan")
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="E1: Multi-detector evaluation")
-    parser.add_argument("--gptzero-key", required=True, help="GPTZero API key")
-    args = parser.parse_args()
-
     os.makedirs(os.path.join(_REPO_ROOT, "outputs"), exist_ok=True)
 
     print("=" * 64, flush=True)
@@ -147,27 +118,28 @@ def main() -> None:
 
     device = get_device()
     el_tok, el_mdl = load_editlens(device)
+    print("[binoculars] Initializing Binoculars ...", flush=True)
+    bino = Binoculars()
+    print("[binoculars] Ready.\n", flush=True)
     policy_tok, policy_mdl = load_policy(device)
     essays = load_essays()
 
     records: list[dict] = []
 
-    print(f"{'#':>3}  {'EL-orig':>8}  {'EL-rew':>8}  {'GZ-orig':>8}  {'GZ-rew':>8}", flush=True)
-    print("-" * 46, flush=True)
+    print(
+        f"{'#':>3}  {'EL-orig':>8}  {'EL-rew':>8}  {'BINO-orig':>9}  {'BINO-rew':>9}",
+        flush=True,
+    )
+    print("-" * 50, flush=True)
 
     for i, essay in enumerate(essays, start=1):
         print(f"\n[essay {i}/{N_ESSAYS}] Generating rewrite ...", flush=True)
         rewrite = generate_rewrite(essay, policy_tok, policy_mdl, device)
 
-        el_orig = editlens_score(el_tok, el_mdl, essay,   device)
-        el_rew  = editlens_score(el_tok, el_mdl, rewrite, device)
-
-        print(f"  [essay {i}] Scoring with GPTZero (original) ...", flush=True)
-        gz_orig = gptzero_score(essay,   args.gptzero_key)
-        time.sleep(1)  # be polite to the API
-        print(f"  [essay {i}] Scoring with GPTZero (rewrite) ...", flush=True)
-        gz_rew  = gptzero_score(rewrite, args.gptzero_key)
-        time.sleep(1)
+        el_orig   = editlens_score(el_tok, el_mdl, essay,   device)
+        el_rew    = editlens_score(el_tok, el_mdl, rewrite, device)
+        bino_orig = float(bino.compute_score(essay))
+        bino_rew  = float(bino.compute_score(rewrite))
 
         record = {
             "essay_num":    i,
@@ -175,8 +147,8 @@ def main() -> None:
             "rewrite":      rewrite,
             "el_original":  el_orig,
             "el_rewrite":   el_rew,
-            "gz_original":  gz_orig,
-            "gz_rewrite":   gz_rew,
+            "bino_original": bino_orig,
+            "bino_rewrite":  bino_rew,
         }
         records.append(record)
 
@@ -184,29 +156,23 @@ def main() -> None:
             f.write(json.dumps(record) + "\n")
 
         print(
-            f"{i:>3}  {el_orig:>8.4f}  {el_rew:>8.4f}  "
-            f"{fmt_or_na(gz_orig):>8}  {fmt_or_na(gz_rew):>8}",
+            f"{i:>3}  {el_orig:>8.4f}  {el_rew:>8.4f}  {bino_orig:>9.4f}  {bino_rew:>9.4f}",
             flush=True,
         )
 
-    # ── Summary table ─────────────────────────────────────────────────────────
-    valid = [r for r in records if r["gz_original"] is not None and r["gz_rewrite"] is not None]
+    # ── Summary ───────────────────────────────────────────────────────────────
+    mean_el_orig   = mean([r["el_original"]   for r in records])
+    mean_el_rew    = mean([r["el_rewrite"]    for r in records])
+    mean_bino_orig = mean([r["bino_original"] for r in records])
+    mean_bino_rew  = mean([r["bino_rewrite"]  for r in records])
 
-    def mean(vals):
-        return sum(vals) / len(vals) if vals else float("nan")
-
-    mean_el_orig = mean([r["el_original"] for r in records])
-    mean_el_rew  = mean([r["el_rewrite"]  for r in records])
-    mean_gz_orig = mean([r["gz_original"] for r in valid])
-    mean_gz_rew  = mean([r["gz_rewrite"]  for r in valid])
-
-    header = f"{'#':>3}  {'EL-orig':>8}  {'EL-rew':>8}  {'GZ-orig':>8}  {'GZ-rew':>8}"
-    sep    = "-" * 46
+    header = f"{'#':>3}  {'EL-orig':>8}  {'EL-rew':>8}  {'BINO-orig':>9}  {'BINO-rew':>9}"
+    sep    = "-" * 50
 
     lines = [
         "=" * 64,
         "  E1: Multi-Detector Results",
-        "  (EditLens: 0=human, 1=AI | GPTZero completely_generated_prob)",
+        "  (EditLens: 0=human, 1=AI | Binoculars: lower=AI)",
         "=" * 64,
         "",
         header,
@@ -215,12 +181,12 @@ def main() -> None:
     for r in records:
         lines.append(
             f"{r['essay_num']:>3}  {r['el_original']:>8.4f}  {r['el_rewrite']:>8.4f}  "
-            f"{fmt_or_na(r['gz_original']):>8}  {fmt_or_na(r['gz_rewrite']):>8}"
+            f"{r['bino_original']:>9.4f}  {r['bino_rewrite']:>9.4f}"
         )
     lines += [
         sep,
         f"{'mean':>3}  {mean_el_orig:>8.4f}  {mean_el_rew:>8.4f}  "
-        f"{fmt_or_na(mean_gz_orig):>8}  {fmt_or_na(mean_gz_rew):>8}",
+        f"{mean_bino_orig:>9.4f}  {mean_bino_rew:>9.4f}",
         "",
         f"Results saved to: {RESULTS_PATH}",
     ]
