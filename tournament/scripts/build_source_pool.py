@@ -33,7 +33,12 @@ def parse_args() -> argparse.Namespace:
 
 
 def gather_pangram(limit: int, min_words: int, max_words: int) -> list[dict[str, object]]:
-    """Stream Pangram human-written records."""
+    """Load Pangram human-written records.
+
+    We intentionally avoid `streaming=True` here. On remote GPU boxes the
+    datasets streaming shutdown path has proven flaky enough to abort the
+    Python process even after outputs were already written.
+    """
 
     try:
         from datasets import load_dataset
@@ -42,7 +47,7 @@ def gather_pangram(limit: int, min_words: int, max_words: int) -> list[dict[str,
 
     rows = []
     seen: set[str] = set()
-    ds = load_dataset("pangram/editlens_iclr", split="train", streaming=True)
+    ds = load_dataset("pangram/editlens_iclr", split="train")
     for idx, row in enumerate(ds):
         if row.get("text_type") != "human_written":
             continue
@@ -64,10 +69,38 @@ def gather_pangram(limit: int, min_words: int, max_words: int) -> list[dict[str,
     return rows
 
 
+def maybe_reuse_existing_pool(
+    out_path: Path,
+    manifest_path: Path,
+    requested_total: int,
+) -> dict[str, object] | None:
+    """Reuse a previously built pool when it already satisfies the request."""
+
+    if not out_path.exists() or not manifest_path.exists():
+        return None
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except json.JSONDecodeError:
+        return None
+    built_total = int(manifest.get("built_total", 0))
+    if built_total < requested_total:
+        return None
+    return manifest
+
+
 def main() -> int:
     args = parse_args()
     cfg = load_yaml_config(args.config, "source") if args.config else SourcePoolConfig()
     total = cfg.train_size + cfg.val_size + cfg.test_size
+    out_path = Path(args.out)
+    manifest_path = Path(args.manifest_out)
+    existing_manifest = maybe_reuse_existing_pool(out_path, manifest_path, total)
+    if existing_manifest is not None:
+        existing_manifest = dict(existing_manifest)
+        existing_manifest["reused_existing"] = True
+        print(json.dumps(existing_manifest, indent=2))
+        return 0
+
     pangram_target = int(total * cfg.pangram_share)
     kaggle_target = int(total * cfg.kaggle_share)
     defan_target = total - pangram_target - kaggle_target
@@ -116,8 +149,8 @@ def main() -> int:
         "defan_rows": sum(1 for row in stamped if row["source_dataset"] == "defan_public"),
         "kaggle_missing": not kaggle_path.exists(),
     }
-    write_jsonl(args.out, stamped)
-    write_json(args.manifest_out, manifest)
+    write_jsonl(out_path, stamped)
+    write_json(manifest_path, manifest)
     print(json.dumps(manifest, indent=2))
     return 0
 

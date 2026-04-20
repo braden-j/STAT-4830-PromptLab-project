@@ -26,7 +26,7 @@ lora_target_modules:
   - up_proj
   - down_proj
 reinforce_steps: 150
-reinforce_batch_size: 4
+reinforce_batch_size: 2
 reward_similarity_weight: 0.25
 reward_length_penalty: 0.10
 reward_baseline_momentum: 0.90
