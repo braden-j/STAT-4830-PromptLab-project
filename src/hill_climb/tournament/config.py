@@ -85,6 +85,7 @@ class EvalConfig:
     run_dir: str = "tournament/outputs/runs/m2_full_lora"
     eval_path: str = "tournament/data/source_pool.jsonl"
     output_path: str = "tournament/outputs/leaderboards/m2_eval.json"
+    eval_split: str = "test"
     score_model: str = "pangram/editlens_roberta-large"
     similarity_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     mean_similarity_gate: float = 0.88

@@ -54,7 +54,7 @@ def main() -> int:
 
     scored_rows = []
     for idx, row in enumerate(rows):
-        if row.get("split") == "train":
+        if cfg.eval_split and row.get("split") not in {cfg.eval_split, None}:
             continue
         input_text = row.get("input_text") or row["text"]
         target_text = row.get("target_text") or row["text"]
