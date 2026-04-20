@@ -18,7 +18,8 @@ from hill_climb.tournament.io import read_jsonl, write_json, write_jsonl
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Build the P2 hard pack")
     p.add_argument("--p0", default="tournament/data/packs/p0_pairs.jsonl")
-    p.add_argument("--m2-failures", default=None)
+    p.add_argument("--failure-evals", default=None)
+    p.add_argument("--m2-failures", dest="failure_evals", default=None)
     p.add_argument("--out", default="tournament/data/packs/p2_hard.jsonl")
     p.add_argument("--manifest-out", default="tournament/data/packs/p2_manifest.json")
     return p.parse_args()
@@ -47,7 +48,7 @@ def main() -> int:
         stamped["hard_reason"] = "lowest_delta"
         picked[stamped["example_id"]] = stamped
 
-    failure_rows = read_jsonl(args.m2_failures) if args.m2_failures else []
+    failure_rows = read_jsonl(args.failure_evals) if args.failure_evals else []
     for row in failure_rows:
         source_id = row.get("source_id")
         matched = next((candidate for candidate in rows if candidate["source_id"] == source_id), None)
@@ -55,7 +56,7 @@ def main() -> int:
             continue
         stamped = dict(matched)
         stamped["sample_weight"] = 1.2
-        stamped["hard_reason"] = "m2_failure"
+        stamped["hard_reason"] = "winner_failure"
         picked[stamped["example_id"]] = stamped
 
     out = list(picked.values())
@@ -63,7 +64,7 @@ def main() -> int:
         "rows": len(out),
         "top_pangram": sum(1 for row in out if row["hard_reason"] == "top_pangram_input"),
         "lowest_delta": sum(1 for row in out if row["hard_reason"] == "lowest_delta"),
-        "m2_failure": sum(1 for row in out if row["hard_reason"] == "m2_failure"),
+        "winner_failure": sum(1 for row in out if row["hard_reason"] == "winner_failure"),
     }
     write_jsonl(args.out, out)
     write_json(args.manifest_out, manifest)

@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -39,6 +41,10 @@ def main() -> int:
     if not raw_rows:
         raise FileNotFoundError(f"No preference data found at {cfg.data_pack_path}")
 
+    if cfg.use_wandb:
+        os.environ.setdefault("WANDB_ENTITY", cfg.wandb_entity)
+        os.environ.setdefault("WANDB_PROJECT", cfg.wandb_project)
+
     tokenizer = AutoTokenizer.from_pretrained(cfg.model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -59,29 +65,44 @@ def main() -> int:
     train_ds = Dataset.from_list(train_rows)
     eval_ds = Dataset.from_list(eval_rows) if eval_rows else None
 
-    dpo_args = DPOConfig(
-        output_dir=cfg.output_dir,
-        per_device_train_batch_size=cfg.batch_size,
-        per_device_eval_batch_size=cfg.batch_size,
-        gradient_accumulation_steps=cfg.gradient_accumulation_steps,
-        learning_rate=cfg.learning_rate,
-        num_train_epochs=cfg.num_epochs_max,
-        warmup_ratio=cfg.warmup_ratio,
-        logging_steps=10,
-        eval_steps=50 if eval_ds is not None else None,
-        save_steps=50,
-        report_to=["wandb"] if cfg.use_wandb else [],
-    )
+    dpo_args_kwargs = {
+        "output_dir": cfg.output_dir,
+        "per_device_train_batch_size": cfg.batch_size,
+        "per_device_eval_batch_size": cfg.batch_size,
+        "gradient_accumulation_steps": cfg.gradient_accumulation_steps,
+        "learning_rate": cfg.learning_rate,
+        "num_train_epochs": cfg.num_epochs_max,
+        "warmup_ratio": cfg.warmup_ratio,
+        "logging_steps": 10,
+        "save_steps": 50,
+        "report_to": ["wandb"] if cfg.use_wandb else [],
+    }
+    if eval_ds is not None:
+        dpo_args_kwargs["eval_steps"] = 50
+    dpo_args_params = inspect.signature(DPOConfig.__init__).parameters
+    eval_strategy_value = "steps" if eval_ds is not None else "no"
+    if "evaluation_strategy" in dpo_args_params:
+        dpo_args_kwargs["evaluation_strategy"] = eval_strategy_value
+    elif "eval_strategy" in dpo_args_params:
+        dpo_args_kwargs["eval_strategy"] = eval_strategy_value
 
-    trainer = DPOTrainer(
-        model=model,
-        ref_model=ref_model,
-        args=dpo_args,
-        train_dataset=train_ds,
-        eval_dataset=eval_ds,
-        tokenizer=tokenizer,
-        peft_config=peft_cfg,
-    )
+    dpo_args = DPOConfig(**dpo_args_kwargs)
+
+    trainer_kwargs = {
+        "model": model,
+        "ref_model": ref_model,
+        "args": dpo_args,
+        "train_dataset": train_ds,
+        "eval_dataset": eval_ds,
+        "peft_config": peft_cfg,
+    }
+    trainer_params = inspect.signature(DPOTrainer.__init__).parameters
+    if "tokenizer" in trainer_params:
+        trainer_kwargs["tokenizer"] = tokenizer
+    elif "processing_class" in trainer_params:
+        trainer_kwargs["processing_class"] = tokenizer
+
+    trainer = DPOTrainer(**trainer_kwargs)
     trainer.train()
     trainer.save_model(cfg.output_dir)
     tokenizer.save_pretrained(cfg.output_dir)
