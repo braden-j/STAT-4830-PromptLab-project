@@ -1,0 +1,18 @@
+{
+  "rows": 250,
+  "eval_path": "tournament/data/packs/p0_pairs.jsonl",
+  "eval_split": "test",
+  "max_eval_rows": 250,
+  "sort_key": "input_score_roberta",
+  "sort_desc": true,
+  "mean_input_score": 0.042276563038428625,
+  "mean_delta_editlens": -0.0630797404802094,
+  "mean_delta_editlens_passed": -0.0271508161725554,
+  "mean_output_score": 0.10535630351863802,
+  "rows_passed": 24,
+  "pass_rate": 0.096,
+  "mean_length_gap": 0.41041118038809604,
+  "mean_similarity": 0.9662863523960113,
+  "median_length_ratio": 0.5775592445567184,
+  "invalid_rate": 0.0
+}
