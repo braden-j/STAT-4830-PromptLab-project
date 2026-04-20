@@ -237,12 +237,12 @@ mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$WANDB_DIR" "$PIP_CACHE_DIR" "$TMPDIR
 
 ## 10. Clone and install
 
-Clone the repo on the attached disk:
+Clone only the branch you need and skip most blobs so the initial checkout is much faster:
 
 ```bash
-git clone https://github.com/braden-j/STAT-4830-PromptLab-project.git
+git clone --filter=blob:none --single-branch --branch tournament-phase1 \
+  https://github.com/braden-j/STAT-4830-PromptLab-project.git
 cd STAT-4830-PromptLab-project
-git checkout tournament-phase1
 ```
 
 Install the environment:
@@ -315,25 +315,23 @@ source /mnt/shared/stat4830/secrets.sh
 
 ## 13. Run the experiments
 
-For the two-GPU fastest path, use:
+For the two-H100 tournament bracket, use:
 
 ```bash
+export PUSH_RESULTS_ON_COMPLETE=1
 bash tournament/scripts/run_phase1_dual_gpu.sh
 ```
 
 This script:
 
 - builds shared data
-- runs `M2` and `M1` in parallel
-- evaluates both
+- runs `M1` and `M2` in parallel
+- pushes the first-stage results
+- runs `M3` (AdamW) and `M4` (REINFORCE) in parallel
+- pushes the second-stage results
+- evaluates all four entrants
+- builds the final leaderboard
 - writes lightweight outputs into `tournament/results/phase1`
-
-If you want GitHub push at completion:
-
-```bash
-export PUSH_RESULTS_ON_COMPLETE=1
-bash tournament/scripts/run_phase1_dual_gpu.sh
-```
 
 ## 14. Realtime tracking besides W&B
 
@@ -381,8 +379,8 @@ If the pod dies or you terminate it:
 The next fastest path is:
 
 1. push the branch
-2. create the `FIN-03` disk
-3. provision the `2x H200 spot` pod
+2. provision the `2x H100` pod you want to use
+3. SSH in and clone with `--filter=blob:none`
 4. run the bootstrap script
 5. add the printed public key to GitHub with write access
 6. verify `ssh -T git@github.com`

@@ -1,0 +1,39 @@
+experiment_id: m4_reinforce
+model_name: TinyLlama/TinyLlama-1.1B-Chat-v1.0
+training_mode: m4_reinforce
+data_pack_path: tournament/data/packs/p0_pairs.jsonl
+eval_path: tournament/data/source_pool.jsonl
+output_dir: tournament/outputs/runs/m4_reinforce
+max_seq_len: 768
+token_budget: 2000000
+batch_size: 1
+gradient_accumulation_steps: 1
+learning_rate: 0.00001
+num_epochs_max: 1
+weight_decay: 0.01
+optim: adamw_torch
+lr_scheduler_type: constant
+seed: 42
+use_wandb: true
+wandb_entity: jgold23-university-of-pennsylvania-model-united-nations-
+wandb_project: PromptLab_STAT4830
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - up_proj
+  - down_proj
+reinforce_steps: 150
+reinforce_batch_size: 4
+reward_similarity_weight: 0.25
+reward_length_penalty: 0.10
+reward_baseline_momentum: 0.90
+save_every_steps: 50
+generation:
+  max_seq_len: 768
+  max_new_tokens: 192
+  temperature: 0.80
+  top_p: 0.95
+  do_sample: true

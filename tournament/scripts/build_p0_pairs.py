@@ -21,6 +21,10 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--source-pool", default="tournament/data/source_pool.jsonl")
     p.add_argument("--out", default="tournament/data/packs/p0_pairs.jsonl")
     p.add_argument("--manifest-out", default="tournament/data/packs/p0_manifest.json")
+    p.add_argument("--max-candidates-per-source", type=int, default=3)
+    p.add_argument("--min-length-ratio", type=float, default=0.65)
+    p.add_argument("--max-length-ratio", type=float, default=1.60)
+    p.add_argument("--min-delta", type=float, default=-1.0)
     return p.parse_args()
 
 
@@ -40,16 +44,18 @@ def main() -> int:
     for idx, row in enumerate(rows):
         target_text = row["text"]
         target_score = module.editlens_score(scorer_tok, scorer_mdl, target_text, device)
-        best = None
+        row_candidates = []
         for mode_name, candidate in sloppify_candidates(target_text, seed=idx * 17):
             cand_score = module.editlens_score(scorer_tok, scorer_mdl, candidate, device)
             ratio = length_ratio(target_text, candidate)
             delta = cand_score - target_score
-            if best is None or delta > best["delta"] or (
-                delta == best["delta"] and cand_score > best["input_score_roberta"]
-            ):
-                best = {
-                    "example_id": f"p0-{idx}",
+            if not (args.min_length_ratio <= ratio <= args.max_length_ratio):
+                continue
+            if delta < args.min_delta:
+                continue
+            row_candidates.append(
+                {
+                    "example_id": f"p0-{idx}-{mode_name}",
                     "source_id": row["id"],
                     "split": row["split"],
                     "input_text": candidate,
@@ -60,43 +66,37 @@ def main() -> int:
                     "length_ratio": ratio,
                     "delta": delta,
                 }
-        if best is None:
+            )
+        if not row_candidates:
             continue
-        candidates.append(best)
-
-    strict_kept = []
-    permissive_kept = []
-    for row in candidates:
-        strong = row["delta"] >= 0.15 and 0.80 <= row["length_ratio"] <= 1.30
-        fallback = row["delta"] >= 0.10
-        permissive = (
-            row["input_text"] != row["target_text"]
-            and 0.70 <= row["length_ratio"] <= 1.50
+        row_candidates.sort(
+            key=lambda item: (item["delta"], item["input_score_roberta"]),
+            reverse=True,
         )
-        if strong:
-            stamped = dict(row)
-            stamped["acceptance_reason"] = "strong"
-            strict_kept.append(stamped)
-        elif fallback:
-            stamped = dict(row)
-            stamped["acceptance_reason"] = "fallback"
-            strict_kept.append(stamped)
-        elif permissive:
-            stamped = dict(row)
-            stamped["acceptance_reason"] = "permissive_fallback"
-            permissive_kept.append(stamped)
+        candidates.extend(row_candidates[: args.max_candidates_per_source])
 
-    kept = strict_kept if strict_kept else permissive_kept
-    mode = "strict" if strict_kept else "permissive_fallback"
+    kept = []
+    for row in candidates:
+        stamped = dict(row)
+        if row["delta"] >= 0.15 and 0.80 <= row["length_ratio"] <= 1.30:
+            stamped["acceptance_reason"] = "strong"
+        elif row["delta"] >= 0.10:
+            stamped["acceptance_reason"] = "fallback"
+        else:
+            stamped["acceptance_reason"] = "no_threshold_topk"
+        kept.append(stamped)
 
     write_jsonl(args.out, kept)
     manifest = {
         "accepted_rows": len(kept),
         "source_rows": len(rows),
         "candidate_rows": len(candidates),
-        "strict_rows": len(strict_kept),
-        "permissive_rows": len(permissive_kept),
-        "acceptance_mode": mode,
+        "acceptance_mode": "topk_no_threshold",
+        "max_candidates_per_source": args.max_candidates_per_source,
+        "min_length_ratio": args.min_length_ratio,
+        "max_length_ratio": args.max_length_ratio,
+        "min_delta": args.min_delta,
+        "mean_delta": sum(row["delta"] for row in kept) / len(kept) if kept else 0.0,
     }
     write_json(args.manifest_out, manifest)
     print(json.dumps(manifest, indent=2))

@@ -56,6 +56,11 @@ class TrainingConfig:
     num_epochs_max: int = 2
     warmup_ratio: float = 0.05
     weight_decay: float = 0.01
+    optim: str = "adamw_torch"
+    lr_scheduler_type: str = "linear"
+    adam_beta1: float = 0.9
+    adam_beta2: float = 0.999
+    adam_epsilon: float = 1e-8
     seed: int = 42
     use_wandb: bool = True
     wandb_entity: str = "jgold23-university-of-pennsylvania-model-united-nations-"
@@ -64,6 +69,12 @@ class TrainingConfig:
     lora_alpha: int = 32
     lora_dropout: float = 0.05
     lora_target_modules: list[str] = field(default_factory=list)
+    reinforce_steps: int = 200
+    reinforce_batch_size: int = 4
+    reward_similarity_weight: float = 0.25
+    reward_length_penalty: float = 0.10
+    reward_baseline_momentum: float = 0.9
+    save_every_steps: int = 50
     generation: GenerationConfig = field(default_factory=GenerationConfig)
 
 

@@ -18,11 +18,17 @@ data/*.jsonl
 outputs/
 *.bin
 *.safetensors
+tournament/data/
+tournament/outputs/
+tournament/logs/
 
 # IDE
 .idea/
 .vscode/
 *.swp
+.DS_Store
+**/.DS_Store
+*.ipynb_checkpoints/
 
 # Logs
 wandb/

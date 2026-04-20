@@ -143,6 +143,16 @@ def main() -> int:
     }
     eval_strategy_value = "steps" if eval_ds is not None else "no"
     training_args_params = inspect.signature(TrainingArguments.__init__).parameters
+    if "optim" in training_args_params:
+        training_args_kwargs["optim"] = cfg.optim
+    if "lr_scheduler_type" in training_args_params:
+        training_args_kwargs["lr_scheduler_type"] = cfg.lr_scheduler_type
+    if "adam_beta1" in training_args_params:
+        training_args_kwargs["adam_beta1"] = cfg.adam_beta1
+    if "adam_beta2" in training_args_params:
+        training_args_kwargs["adam_beta2"] = cfg.adam_beta2
+    if "adam_epsilon" in training_args_params:
+        training_args_kwargs["adam_epsilon"] = cfg.adam_epsilon
     if "evaluation_strategy" in training_args_params:
         training_args_kwargs["evaluation_strategy"] = eval_strategy_value
     elif "eval_strategy" in training_args_params:
