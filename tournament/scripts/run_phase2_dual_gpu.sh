@@ -80,6 +80,20 @@ stage_artifacts() {
   cp tournament/logs/*.log "$RESULTS_DIR"/logs/ 2>/dev/null || true
 }
 
+eval_if_run_exists() {
+  local gpu_id="$1"
+  local run_dir="$2"
+  local out_json="$3"
+  local tmp_cfg="$4"
+  local log_path="$5"
+  if [[ ! -f "${run_dir}/run_metadata.json" ]]; then
+    return 1
+  fi
+  make_eval_config "$run_dir" "$out_json" "$tmp_cfg" >/dev/null
+  CUDA_VISIBLE_DEVICES="$gpu_id" "$PYTHON_BIN" tournament/scripts/eval_checkpoint.py --config "$tmp_cfg" \
+    2>&1 | tee "$log_path"
+}
+
 echo "[step] verify round-1 prerequisites"
 test -f tournament/data/packs/p0_pairs.jsonl || { echo "[error] Missing P0 pack"; exit 1; }
 test -f tournament/data/packs/p1_curriculum.jsonl || { echo "[error] Missing P1 pack"; exit 1; }
@@ -146,6 +160,24 @@ CUDA_VISIBLE_DEVICES=0 "$PYTHON_BIN" tournament/scripts/eval_checkpoint.py --con
 
 stage_artifacts
 push_results "Update M7 phase-2 results"
+
+echo "[step] refresh round-1 evals under the harder benchmark"
+eval_if_run_exists 0 "tournament/outputs/runs/m1_attn_lora" "tournament/outputs/leaderboards/m1_eval.json" "tournament/configs/eval/m1_temp_eval.yaml" "tournament/logs/m1_reval.log" &
+PID_M1_REVAL=$!
+eval_if_run_exists 1 "tournament/outputs/runs/m2_full_lora" "tournament/outputs/leaderboards/m2_eval.json" "tournament/configs/eval/m2_temp_eval.yaml" "tournament/logs/m2_reval.log" &
+PID_M2_REVAL=$!
+wait "$PID_M1_REVAL" || true
+wait "$PID_M2_REVAL" || true
+
+eval_if_run_exists 0 "tournament/outputs/runs/m3_adamw" "tournament/outputs/leaderboards/m3_eval.json" "tournament/configs/eval/m3_temp_eval.yaml" "tournament/logs/m3_reval.log" &
+PID_M3_REVAL=$!
+eval_if_run_exists 1 "tournament/outputs/runs/m4_reinforce" "tournament/outputs/leaderboards/m4_eval.json" "tournament/configs/eval/m4_temp_eval.yaml" "tournament/logs/m4_reval.log" &
+PID_M4_REVAL=$!
+wait "$PID_M3_REVAL" || true
+wait "$PID_M4_REVAL" || true
+
+stage_artifacts
+push_results "Refresh round-1 evals on the harder benchmark"
 
 echo "[step] build combined leaderboard"
 EVAL_JSONS=()

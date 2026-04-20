@@ -1,7 +1,10 @@
 run_dir: tournament/outputs/runs/m2_full_lora
-eval_path: tournament/data/source_pool.jsonl
+eval_path: tournament/data/packs/p0_pairs.jsonl
 output_path: tournament/outputs/leaderboards/m2_eval.json
 eval_split: test
+max_eval_rows: 250
+sort_key: input_score_roberta
+sort_desc: true
 score_model: pangram/editlens_roberta-large
 similarity_model: sentence-transformers/all-MiniLM-L6-v2
 mean_similarity_gate: 0.88

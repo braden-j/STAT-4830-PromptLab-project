@@ -83,9 +83,12 @@ class EvalConfig:
     """Evaluation and leaderboard configuration."""
 
     run_dir: str = "tournament/outputs/runs/m2_full_lora"
-    eval_path: str = "tournament/data/source_pool.jsonl"
+    eval_path: str = "tournament/data/packs/p0_pairs.jsonl"
     output_path: str = "tournament/outputs/leaderboards/m2_eval.json"
     eval_split: str = "test"
+    max_eval_rows: int | None = 250
+    sort_key: str = "input_score_roberta"
+    sort_desc: bool = True
     score_model: str = "pangram/editlens_roberta-large"
     similarity_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     mean_similarity_gate: float = 0.88

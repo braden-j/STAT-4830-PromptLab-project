@@ -41,6 +41,20 @@ def main() -> int:
     rows = read_jsonl(cfg.eval_path)
     if not rows:
         raise FileNotFoundError(f"No eval rows found at {cfg.eval_path}")
+    if cfg.eval_split:
+        rows = [row for row in rows if row.get("split") in {cfg.eval_split, None}]
+    if cfg.sort_key:
+        rows = sorted(
+            rows,
+            key=lambda row: float(row.get(cfg.sort_key, 0.0) or 0.0),
+            reverse=cfg.sort_desc,
+        )
+    if cfg.max_eval_rows is not None:
+        rows = rows[: cfg.max_eval_rows]
+    if not rows:
+        raise FileNotFoundError(
+            f"No eval rows remain at {cfg.eval_path} after applying split/filter settings"
+        )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     pangram = load_canonical_pangram_module()
@@ -54,8 +68,6 @@ def main() -> int:
 
     scored_rows = []
     for idx, row in enumerate(rows):
-        if cfg.eval_split and row.get("split") not in {cfg.eval_split, None}:
-            continue
         input_text = row.get("input_text") or row["text"]
         target_text = row.get("target_text") or row["text"]
         prompt = format_rewrite_prompt(input_text)
@@ -100,10 +112,21 @@ def main() -> int:
         ratios=[row["length_ratio"] for row in scored_rows],
         invalid_flags=[row["invalid"] for row in scored_rows],
     )
+    passed_rows = [row for row in scored_rows if row["passed"]]
     summary = {
         "rows": len(scored_rows),
+        "eval_path": cfg.eval_path,
+        "eval_split": cfg.eval_split,
+        "max_eval_rows": cfg.max_eval_rows,
+        "sort_key": cfg.sort_key,
+        "sort_desc": cfg.sort_desc,
+        "mean_input_score": statistics.fmean(row["input_score"] for row in scored_rows) if scored_rows else 0.0,
         "mean_delta_editlens": statistics.fmean(row["delta_editlens"] for row in scored_rows) if scored_rows else 0.0,
+        "mean_delta_editlens_passed": statistics.fmean(row["delta_editlens"] for row in passed_rows) if passed_rows else 0.0,
         "mean_output_score": statistics.fmean(row["output_score"] for row in scored_rows) if scored_rows else 1.0,
+        "rows_passed": len(passed_rows),
+        "pass_rate": (len(passed_rows) / len(scored_rows)) if scored_rows else 0.0,
+        "mean_length_gap": statistics.fmean(abs(1.0 - row["length_ratio"]) for row in scored_rows) if scored_rows else 1.0,
         **gate_metrics,
     }
     write_json(cfg.output_path, summary)

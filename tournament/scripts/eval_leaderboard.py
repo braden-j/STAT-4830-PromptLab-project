@@ -33,17 +33,47 @@ def main() -> int:
 
     rows.sort(
         key=lambda row: (
+            -row.get("pass_rate", 0.0),
             -row.get("mean_delta_editlens", 0.0),
             row.get("mean_output_score", 1.0),
             -row.get("mean_similarity", 0.0),
+            row.get("mean_length_gap", 1.0),
         )
     )
 
+    if rows:
+        leader_delta = rows[0].get("mean_delta_editlens", 0.0)
+        leader_pass = rows[0].get("pass_rate", 0.0)
+        for rank, row in enumerate(rows, start=1):
+            row["rank"] = rank
+            row["delta_from_leader"] = row.get("mean_delta_editlens", 0.0) - leader_delta
+            row["pass_rate_from_leader"] = row.get("pass_rate", 0.0) - leader_pass
+
     out_path = Path(args.out_csv)
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = list(rows[0].keys()) if rows else ["run_name", "mean_delta_editlens"]
+    preferred = [
+        "rank",
+        "run_name",
+        "rows",
+        "rows_passed",
+        "pass_rate",
+        "mean_input_score",
+        "mean_delta_editlens",
+        "delta_from_leader",
+        "mean_delta_editlens_passed",
+        "mean_output_score",
+        "mean_similarity",
+        "median_length_ratio",
+        "mean_length_gap",
+        "invalid_rate",
+        "pass_rate_from_leader",
+        "eval_split",
+        "max_eval_rows",
+        "sort_key",
+    ]
+    fieldnames = preferred if rows else ["run_name", "mean_delta_editlens"]
     with open(out_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
 
