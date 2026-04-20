@@ -7,7 +7,7 @@ name = "slop-minimization"
 version = "0.1.0"
 description = "Token-level slop classifier and generator for minimizing AI slop"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 license = "MIT"
 authors = [{ name = "Slop Minimization Team" }]
 dependencies = [

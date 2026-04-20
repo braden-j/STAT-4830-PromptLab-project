@@ -57,6 +57,9 @@ def download_defan(path: str | Path) -> Path:
 def load_kaggle_essays(path: str | Path, min_words: int, max_words: int) -> list[dict[str, Any]]:
     """Load Kaggle essays from the fixed CSV path."""
 
+    path = Path(path)
+    if not path.exists():
+        return []
     rows = read_csv_dicts(path)
     if not rows:
         return []
@@ -117,14 +120,36 @@ def sloppify_candidates(
 ) -> list[tuple[str, str]]:
     """Generate named sloppified candidates from a clean target."""
 
+    easy = RuleSloppifier.from_difficulty("easy", seed=seed).sloppify(text)
+    medium = RuleSloppifier.from_difficulty("medium", seed=seed + 1).sloppify(text)
+    hard = RuleSloppifier.from_difficulty("hard", seed=seed + 2).sloppify(text)
+    easy_then_hard = RuleSloppifier.from_difficulty("hard", seed=seed + 3).sloppify(easy)
+    easy_then_medium = RuleSloppifier.from_difficulty("medium", seed=seed + 4).sloppify(easy)
+    full_stack = RuleSloppifier.from_difficulty("hard", seed=seed + 5).sloppify(
+        RuleSloppifier.from_difficulty("medium", seed=seed + 6).sloppify(
+            RuleSloppifier.from_difficulty("easy", seed=seed + 7).sloppify(text)
+        )
+    )
     modes = [
-        ("rule_easy", RuleSloppifier.from_difficulty("easy", seed=seed).sloppify(text)),
-        ("rule_medium", RuleSloppifier.from_difficulty("medium", seed=seed + 1).sloppify(text)),
-        ("rule_hard", RuleSloppifier.from_difficulty("hard", seed=seed + 2).sloppify(text)),
+        ("rule_easy", easy),
+        ("rule_medium", medium),
+        ("rule_hard", hard),
+        ("rule_easy_then_hard", easy_then_hard),
+        ("rule_easy_then_medium", easy_then_medium),
+        ("rule_full_stack", full_stack),
     ]
     if include_prompt_mode:
         modes.append(("prompt_stub", text))
-    return modes
+    deduped: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    original = normalize_text(text)
+    for mode_name, candidate in modes:
+        candidate = normalize_text(candidate)
+        if not candidate or candidate == original or candidate in seen:
+            continue
+        seen.add(candidate)
+        deduped.append((mode_name, candidate))
+    return deduped
 
 
 def choose_split_counts(total: int, train: int, val: int, test: int) -> tuple[int, int, int]:

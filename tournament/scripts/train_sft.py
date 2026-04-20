@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -24,11 +26,20 @@ def parse_args() -> argparse.Namespace:
 
 def _mask_prompt_labels(tokenizer, prompt: str, completion: str, max_length: int) -> dict[str, list[int]]:
     full_text = prompt + completion
-    tokenized = tokenizer(full_text, truncation=True, max_length=max_length)
+    tokenized = tokenizer(
+        full_text,
+        truncation=True,
+        max_length=max_length,
+        padding="max_length",
+    )
     prompt_ids = tokenizer(prompt, truncation=True, max_length=max_length)["input_ids"]
     labels = list(tokenized["input_ids"])
     mask_len = min(len(prompt_ids), len(labels))
     labels[:mask_len] = [-100] * mask_len
+    labels = [
+        label if mask == 1 else -100
+        for label, mask in zip(labels, tokenized.get("attention_mask", [1] * len(labels)))
+    ]
     tokenized["labels"] = labels
     return tokenized
 
@@ -87,6 +98,10 @@ def main() -> int:
     if not raw_rows:
         raise FileNotFoundError(f"No SFT data found at {cfg.data_pack_path}")
 
+    if cfg.use_wandb:
+        os.environ.setdefault("WANDB_ENTITY", cfg.wandb_entity)
+        os.environ.setdefault("WANDB_PROJECT", cfg.wandb_project)
+
     tokenizer = AutoTokenizer.from_pretrained(cfg.model_name)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -109,32 +124,44 @@ def main() -> int:
     eval_ds = Dataset.from_list(eval_rows).map(tokenize_batch, batched=True, remove_columns=Dataset.from_list(eval_rows).column_names) if eval_rows else None
 
     report_to = ["wandb"] if cfg.use_wandb else []
-    training_args = TrainingArguments(
-        output_dir=cfg.output_dir,
-        per_device_train_batch_size=cfg.batch_size,
-        per_device_eval_batch_size=cfg.batch_size,
-        gradient_accumulation_steps=cfg.gradient_accumulation_steps,
-        learning_rate=cfg.learning_rate,
-        num_train_epochs=cfg.num_epochs_max,
-        warmup_ratio=cfg.warmup_ratio,
-        weight_decay=cfg.weight_decay,
-        logging_steps=10,
-        evaluation_strategy="steps" if eval_ds is not None else "no",
-        eval_steps=50,
-        save_steps=50,
-        save_total_limit=2,
-        report_to=report_to,
-        fp16=torch.cuda.is_available(),
-        seed=cfg.seed,
-    )
+    training_args_kwargs = {
+        "output_dir": cfg.output_dir,
+        "per_device_train_batch_size": cfg.batch_size,
+        "per_device_eval_batch_size": cfg.batch_size,
+        "gradient_accumulation_steps": cfg.gradient_accumulation_steps,
+        "learning_rate": cfg.learning_rate,
+        "num_train_epochs": cfg.num_epochs_max,
+        "warmup_ratio": cfg.warmup_ratio,
+        "weight_decay": cfg.weight_decay,
+        "logging_steps": 10,
+        "eval_steps": 50,
+        "save_steps": 50,
+        "save_total_limit": 2,
+        "report_to": report_to,
+        "fp16": torch.cuda.is_available(),
+        "seed": cfg.seed,
+    }
+    eval_strategy_value = "steps" if eval_ds is not None else "no"
+    training_args_params = inspect.signature(TrainingArguments.__init__).parameters
+    if "evaluation_strategy" in training_args_params:
+        training_args_kwargs["evaluation_strategy"] = eval_strategy_value
+    elif "eval_strategy" in training_args_params:
+        training_args_kwargs["eval_strategy"] = eval_strategy_value
+    training_args = TrainingArguments(**training_args_kwargs)
 
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_ds,
-        eval_dataset=eval_ds,
-        tokenizer=tokenizer,
-    )
+    trainer_kwargs = {
+        "model": model,
+        "args": training_args,
+        "train_dataset": train_ds,
+        "eval_dataset": eval_ds,
+    }
+    trainer_params = inspect.signature(Trainer.__init__).parameters
+    if "tokenizer" in trainer_params:
+        trainer_kwargs["tokenizer"] = tokenizer
+    elif "processing_class" in trainer_params:
+        trainer_kwargs["processing_class"] = tokenizer
+
+    trainer = Trainer(**trainer_kwargs)
     trainer.train()
     trainer.save_model(cfg.output_dir)
     tokenizer.save_pretrained(cfg.output_dir)

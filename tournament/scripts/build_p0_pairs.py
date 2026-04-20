@@ -36,7 +36,7 @@ def main() -> int:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     scorer_tok, scorer_mdl = module.load_editlens(device)
 
-    kept = []
+    candidates = []
     for idx, row in enumerate(rows):
         target_text = row["text"]
         target_score = module.editlens_score(scorer_tok, scorer_mdl, target_text, device)
@@ -45,7 +45,9 @@ def main() -> int:
             cand_score = module.editlens_score(scorer_tok, scorer_mdl, candidate, device)
             ratio = length_ratio(target_text, candidate)
             delta = cand_score - target_score
-            if best is None or cand_score > best["input_score_roberta"]:
+            if best is None or delta > best["delta"] or (
+                delta == best["delta"] and cand_score > best["input_score_roberta"]
+            ):
                 best = {
                     "example_id": f"p0-{idx}",
                     "source_id": row["id"],
@@ -60,14 +62,44 @@ def main() -> int:
                 }
         if best is None:
             continue
-        strong = best["delta"] >= 0.15 and 0.80 <= best["length_ratio"] <= 1.30
-        fallback = best["delta"] >= 0.10
-        if strong or fallback:
-            kept.append(best)
+        candidates.append(best)
+
+    strict_kept = []
+    permissive_kept = []
+    for row in candidates:
+        strong = row["delta"] >= 0.15 and 0.80 <= row["length_ratio"] <= 1.30
+        fallback = row["delta"] >= 0.10
+        permissive = (
+            row["input_text"] != row["target_text"]
+            and 0.70 <= row["length_ratio"] <= 1.50
+        )
+        if strong:
+            stamped = dict(row)
+            stamped["acceptance_reason"] = "strong"
+            strict_kept.append(stamped)
+        elif fallback:
+            stamped = dict(row)
+            stamped["acceptance_reason"] = "fallback"
+            strict_kept.append(stamped)
+        elif permissive:
+            stamped = dict(row)
+            stamped["acceptance_reason"] = "permissive_fallback"
+            permissive_kept.append(stamped)
+
+    kept = strict_kept if strict_kept else permissive_kept
+    mode = "strict" if strict_kept else "permissive_fallback"
 
     write_jsonl(args.out, kept)
-    write_json(args.manifest_out, {"accepted_rows": len(kept), "source_rows": len(rows)})
-    print(json.dumps({"accepted_rows": len(kept), "source_rows": len(rows)}, indent=2))
+    manifest = {
+        "accepted_rows": len(kept),
+        "source_rows": len(rows),
+        "candidate_rows": len(candidates),
+        "strict_rows": len(strict_kept),
+        "permissive_rows": len(permissive_kept),
+        "acceptance_mode": mode,
+    }
+    write_json(args.manifest_out, manifest)
+    print(json.dumps(manifest, indent=2))
     return 0
 
 

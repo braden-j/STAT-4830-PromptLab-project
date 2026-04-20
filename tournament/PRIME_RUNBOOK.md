@@ -220,6 +220,21 @@ mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$WANDB_DIR" "$PIP_CACHE_DIR" "$TMPDIR
 
 This is important. Do not let model caches and checkpoints fill the pod’s root disk.
 
+If your pod does not expose a writable shared mount, use a home-directory fallback instead:
+
+```bash
+mkdir -p ~/stat4830
+cd ~/stat4830
+
+export WORK_ROOT=~/stat4830
+export HF_HOME=~/stat4830/hf
+export TRANSFORMERS_CACHE=~/stat4830/hf/transformers
+export WANDB_DIR=~/stat4830/wandb
+export PIP_CACHE_DIR=~/stat4830/pip-cache
+export TMPDIR=~/stat4830/tmp
+mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$WANDB_DIR" "$PIP_CACHE_DIR" "$TMPDIR"
+```
+
 ## 10. Clone and install
 
 Clone the repo on the attached disk:

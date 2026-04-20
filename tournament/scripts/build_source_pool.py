@@ -73,7 +73,18 @@ def main() -> int:
     defan_target = total - pangram_target - kaggle_target
 
     pangram_rows = gather_pangram(pangram_target, cfg.min_words, cfg.max_words)
-    kaggle_rows = load_kaggle_essays(cfg.kaggle_path, cfg.min_words, cfg.max_words)[:kaggle_target]
+    kaggle_path = Path(cfg.kaggle_path)
+    if not kaggle_path.exists():
+        print(
+            json.dumps(
+                {
+                    "warning": "Kaggle essays file missing; backfilling the source pool with Pangram rows",
+                    "kaggle_path": str(kaggle_path),
+                }
+            ),
+            file=sys.stderr,
+        )
+    kaggle_rows = load_kaggle_essays(kaggle_path, cfg.min_words, cfg.max_words)[:kaggle_target]
     defan_path = download_defan(cfg.defan_path)
     defan_rows = load_defan_records(defan_path, cfg.min_words, cfg.max_words)[:defan_target]
 
@@ -97,9 +108,13 @@ def main() -> int:
     manifest = {
         "requested_total": total,
         "built_total": len(stamped),
+        "pangram_target": pangram_target,
+        "kaggle_target": kaggle_target,
+        "defan_target": defan_target,
         "pangram_rows": sum(1 for row in stamped if str(row["source_dataset"]).startswith("pangram")),
         "kaggle_rows": sum(1 for row in stamped if row["source_dataset"] == "aeon_essays"),
         "defan_rows": sum(1 for row in stamped if row["source_dataset"] == "defan_public"),
+        "kaggle_missing": not kaggle_path.exists(),
     }
     write_jsonl(args.out, stamped)
     write_json(args.manifest_out, manifest)
