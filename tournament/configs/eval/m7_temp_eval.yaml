@@ -1,0 +1,13 @@
+run_dir: tournament/outputs/runs/m7_dpo
+eval_path: tournament/data/packs/p0_pairs.jsonl
+output_path: tournament/outputs/leaderboards/m7_eval.json
+eval_split: test
+max_eval_rows: 250
+sort_key: input_score_roberta
+sort_desc: true
+score_model: pangram/editlens_roberta-large
+similarity_model: sentence-transformers/all-MiniLM-L6-v2
+mean_similarity_gate: 0.88
+min_length_ratio: 0.8
+max_length_ratio: 1.25
+max_invalid_rate: 0.02
