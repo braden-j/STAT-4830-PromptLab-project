@@ -563,6 +563,13 @@ def reinforce_step(
     ]
     mean_reward = sum(rewards) / len(rewards)
 
+    # Batch advantage normalization: zero-mean, unit-variance across the batch.
+    # This works from step 1 — no warmup required.
+    rewards_t  = torch.tensor(rewards, dtype=torch.float32)
+    adv_mean   = rewards_t.mean().item()
+    adv_std    = rewards_t.std().item() if n_accepted > 1 else 1.0
+    advantages = [(r - adv_mean) / (adv_std + 1e-8) for r in rewards]
+
     # ── Phase 3: recompute log-probs WITH grad (REINFORCE policy gradient) ─
     # Process one rollout at a time and call .backward() immediately to avoid
     # accumulating all activation tensors in VRAM simultaneously.
@@ -570,9 +577,8 @@ def reinforce_step(
     # equivalent to computing the mean and calling .backward() once.
     policy_mdl.train()
     optimizer.zero_grad()
-    n_accepted = len(accepted_inputs)
 
-    for (prompt_ids, gen_ids, p_len, _), reward in zip(accepted_inputs, rewards):
+    for (prompt_ids, gen_ids, p_len, _), advantage in zip(accepted_inputs, advantages):
         prompt_ids = prompt_ids.to(device)
         gen_ids    = gen_ids.to(device)
 
@@ -585,7 +591,7 @@ def reinforce_step(
         per_tok_lp    = gen_log_probs.gather(1, gen_ids.unsqueeze(1)).squeeze(1)
         seq_lp        = per_tok_lp.mean()
 
-        loss = -seq_lp * reward / n_accepted
+        loss = -seq_lp * advantage / n_accepted
         loss.backward()
 
         del full_ids, logits, log_probs_all, gen_log_probs, per_tok_lp, loss
