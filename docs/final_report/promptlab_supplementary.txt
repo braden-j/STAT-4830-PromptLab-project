@@ -1,0 +1,122 @@
+Supplementary Material for
+Optimization Against AI Slop:
+Three Empirical Workstreams from the PromptLab Repository
+
+S1. Figure Provenance and Asset Inventory
+
+All figures used in the revised report are either derived directly from repository output files or reconstructed as clean academic diagrams from repository code paths and presentation notes. Slide screenshots are intentionally excluded from the report and from the recommended figure set below.
+
+The current report uses the following figure assets in `docs/final_report/figures/`:
+
+1. `tournament_phase2_tradeoff.png`
+   Source basis: replotted from `tournament/results/phase2/leaderboard.csv`.
+   Recommended use: main paper figure for the tournament section. Shows the tradeoff between score improvement and fidelity.
+
+2. `editlens_reference_bands.png`
+   Source basis: reconstructed from the project's EditLens calibration notes.
+   Recommended use: main paper figure for the RL setup section. Explains the score geometry.
+
+3. `rl_progression_clean.png`
+   Source basis: replotted from `outputs/c2_eval.jsonl`.
+   Recommended use: main paper figure for the RL results section. Summarizes both score trajectory and label-bucket transfer.
+
+4. `kl_ablation_clean.png`
+   Source basis: reconstructed from `outputs/c2_eval.jsonl`, `outputs/c4a_eval.jsonl`, and `outputs/c4c_eval.jsonl`.
+   Recommended use: main paper figure for reward-hacking analysis.
+
+5. `promptlab_v2_pipeline.png`
+   Source basis: reconstructed from code paths in `src/hill_climb/prompt_opt/` and `src/hill_climb/slop_gen/`, plus presentation notes.
+   Recommended use: main paper figure for the Promptlab-v2 method section.
+
+6. `promptlab_v2_results.png`
+   Source basis: reconstructed from the Promptlab-v2 presentation notes.
+   Recommended use: main paper figure for the Promptlab-v2 validation result.
+
+Recommendation for a compiled paper:
+
+- Keep all six figures above in the main paper if space allows.
+- If page pressure becomes severe, move `promptlab_v2_pipeline.png` to the supplement before cutting any RL figure.
+
+S2. Extended Quantitative Notes
+
+S2.1 RL checkpoint trajectory (`outputs/c2_eval.jsonl`)
+
+| Step | Mean EditLens | LABEL_0 (%) | LABEL_1 (%) | LABEL_3 (%) | KL |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 0 | 0.9990 | 0 | 0 | 100 | 0.0000 |
+| 50 | 0.7677 | 1 | 29 | 70 | 0.3972 |
+| 100 | 0.7664 | 0 | 32 | 68 | 0.4215 |
+| 150 | 0.7535 | 0 | 36 | 64 | 0.4567 |
+| 200 | 0.7246 | 3 | 39 | 58 | 0.4814 |
+| 250 | 0.6819 | 4 | 44 | 52 | 0.5133 |
+| 300 | 0.7026 | 5 | 35 | 60 | 0.5495 |
+| 350 | 0.7178 | 5 | 33 | 62 | 0.5513 |
+| 400 | 0.6749 | 11 | 31 | 58 | 0.5804 |
+| 450 | 0.6850 | 9 | 34 | 56 | 0.5447 |
+| 500 | 0.6700 | 11 | 34 | 55 | 0.5183 |
+
+Interpretation:
+
+- The main gain happens early: by step 50 the model has already moved roughly 23 percentage points in mean EditLens.
+- The training curve is not monotone after step 250, which is consistent with a high-variance RL regime.
+- Later gains are incremental and partly offset by instability.
+
+S2.2 KL-penalty ablation
+
+| Run | Mean EditLens at step 500 | KL divergence at step 500 | Interpretation |
+| --- | ---: | ---: | --- |
+| C2 (`KL=0.1`) | 0.6700 | 0.5183 | best trustworthy operating point |
+| C4-a (`KL=0.0`) | 0.6325 | 0.6371 | slightly better detector score, somewhat less stable |
+| C4-c (`KL=0.5`) | 0.4307 | 3.7347 | apparent improvement is not trustworthy; strong reward-hacking signature |
+
+S2.3 Tournament phase-1 summary
+
+| Run | Rows | Mean delta EditLens | Median length ratio |
+| --- | ---: | ---: | ---: |
+| M1 | 500 | -0.00639 | 0.7471 |
+| M2 | 500 | -0.00674 | 0.7471 |
+| M3 | 500 | -0.00644 | 0.7471 |
+| M4 | 500 | -0.01251 | 0.7519 |
+
+S2.4 Tournament phase-2 summary
+
+| Run | Pass rate | Mean delta EditLens | Mean similarity | Median length ratio |
+| --- | ---: | ---: | ---: | ---: |
+| M4 | 0.160 | +0.00035 | 0.8486 | 0.5981 |
+| M7 | 0.128 | -0.02908 | 0.8981 | 0.5851 |
+| M3 | 0.104 | -0.06519 | 0.9628 | 0.5776 |
+| M5 | 0.096 | -0.06308 | 0.9663 | 0.5776 |
+| M2 | 0.092 | -0.06510 | 0.9610 | 0.5795 |
+| M1 | 0.080 | -0.06515 | 0.9640 | 0.5783 |
+| M6 | 0.076 | -0.06465 | 0.9619 | 0.5784 |
+
+Interpretation:
+
+- `M4` is nominally the leader, but the effect size is tiny and accompanied by poor length preservation.
+- The shared harness makes it difficult to claim a meaningful winner.
+
+S2.5 Multi-detector summary
+
+The 20-essay multi-detector check reports mean EditLens `0.9900 -> 0.8171` and a perplexity-based statistic `10.94 -> 57.10`. This should not be read as straightforward generalization. The rise in the second statistic is dominated by a few degenerate outputs with extreme values, including one case above 800.
+
+S3. Qualitative Failure Modes
+
+S3.1 RL branch
+
+- Essay 5 (`outputs/e3_qualitative.txt`): the model refuses to rewrite violent content and instead outputs a safety refusal. Detector score improves, but the rewrite task is not completed.
+- Essay 6 (`outputs/e3_qualitative_v2.txt`): strongest clean success case. The model preserves the detective-story setup while making denser stylistic edits; score improves from `0.9995` to `0.4764`.
+- Essay 7 (`outputs/e3_qualitative_v2.txt`): the model falls into broken token sequences and pseudo-words while still driving the detector score down sharply.
+- Essay 9 (`outputs/e3_qualitative.txt` and `outputs/e3_qualitative_v2.txt`): the model begins a plausible rewrite and then spills into explanation or malformed continuation, illustrating partial reward hacking rather than stable editing.
+
+S3.2 Promptlab-v2 branch
+
+The Promptlab-v2 notes describe an example-essay comparison in which the strongest model (`v3`) outperforms both the baseline and the prompt-to-prompt alternatives, but does so by producing visibly shorter prose. The repository's own interpretation is the right one: this is a T5-base artifact caused by summarization pretraining, not evidence that the overall search-and-distill idea is invalid.
+
+S4. Suggested Supplementary Tables for Future Expansion
+
+If this report is later expanded into a submission-length draft, the following tables would strengthen the supplement:
+
+1. a run-by-run transcription of the Promptlab-v2 ablation table described in the presentation notes;
+2. a small table of the exact LoRA targets, learning rates, and stopping criteria across `M1`-`M7`;
+3. a detector-regime table that explicitly separates local slop metrics, Pangram RoBERTa, and Pangram 3B;
+4. a human-evaluation placeholder table, since the strongest remaining limitation across all branches is the absence of human judgment data.
